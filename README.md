@@ -1,99 +1,102 @@
-# Jupiter Workspace Repo
+# Jupiter Workspace
 
-이 저장소는 홈 디렉터리 덤프를 그대로 올리지 않고, 실제로 관리할 코드와 실행 인프라만 남기는 구조로 정리했습니다.
+Jupiter Workspace는 분석 업무용 웹 UI, API, DB, 실행 인프라를 한 저장소에서 관리하기 위해 정리한 프로젝트입니다.
 
-## 왜 `infra/web/{docker,kubernetes}` 인가
+기존처럼 홈 디렉터리 전체를 그대로 옮기는 방식이 아니라, 실제로 관리해야 하는 코드와 실행 구성만 남겨서 **재현 가능하고 설명 가능한 구조**로 다시 정리했습니다.
 
-`kube-infra/`와 `docker-infra/`를 루트에서 나누면 같은 웹 서비스의 실행 방식만 달라져도 파일이 흩어집니다.  
-이 저장소는 서비스 기준으로 묶었습니다.
+---
 
-- `apps/web`: React + Vite 기반 웹 UI
-- `apps/api`: Spring Boot API
-- `infra/web/docker`: 웹 단독 Docker 실행 경로
-- `infra/web/kubernetes`: 웹 배포용 Kubernetes 매니페스트
-- `scripts`: 운영 보조 스크립트
+## 프로젝트 개요
 
-이렇게 두면 웹 관련 소스와 실행 경로를 한 번에 찾을 수 있고, 새 서버로 옮길 때도 서비스별로 옮기기 쉽습니다.
+이 프로젝트는 단순한 웹 화면 저장소가 아니라, 분석 환경에서 필요한 기능을 한 번에 다루기 위한 개발용 워크스페이스입니다.
 
-## 신규 서버에서 시작하기
+현재 기준으로 다음 범위를 포함합니다.
 
-### 1. Web
+- React + Vite 기반 Web UI
+- Spring Boot 기반 API 서버
+- MariaDB 기반 DB 구성
+- Docker / Kubernetes 실행 구조
+- 개인별 분석환경을 만들기 위한 실행 템플릿
+- Gemini 연동을 통해 분석환경에서 **파이썬 파일 생성, 수정, 실행 흐름을 처리할 수 있는 구조**
 
-```bash
-cd apps/web
-cp .env.example .env
-./run-local.sh
-```
+즉, 단순 CRUD 웹이 아니라 **사용자별 분석 공간을 만들고, 그 안에서 코드 실행과 AI 기반 작업 흐름까지 확장할 수 있도록 구성한 프로젝트**입니다.
 
-기본 포트는 `5173`이고, API 프록시는 `.env`의 `VITE_API_PROXY`에서 가져옵니다.
+---
 
-### 2. API
+## 주요 기능
 
-```bash
-cd apps/api
-cp .env.example .env
-./run-local.sh
-```
+### 1. Web UI
+- React + Vite 기반 프론트엔드
+- API와 연동되는 워크스페이스 화면 제공
+- 로컬 실행 및 Docker 실행 지원
+- 분석환경 접근용 기본 UI 구성
 
-`run-local.sh`는 `.env`를 먼저 읽고 `gradle bootRun`을 실행합니다.  
-새 서버에서는 MariaDB, workspace 경로, 외부 URL, OAuth 값만 `.env`에 맞게 넣으면 됩니다.
+### 2. API 서버
+- Spring Boot 기반 백엔드
+- 인증 및 워크스페이스 관련 API 제공
+- 파일/실행 요청 처리
+- 정적 문서(`/docs`) 제공 가능
+- 개인별 분석환경 생성 시 필요한 환경 설정값 관리
 
-## Docker로 Web만 단독 실행
+### 3. 개인별 분석환경 구성
+- 사용자별 분석환경을 분리해서 구성할 수 있도록 설계
+- 워크스페이스 루트, 스냅샷 경로, 실행 경로 등의 환경값 관리
+- 분석환경에서 사용할 기본 서비스 주소를 API에서 통합 관리
 
-```bash
-cd infra/web/docker
-docker compose up --build
-```
+### 4. Gemini 연동 기반 실행 템플릿
+- Gemini를 연동하여 개인별 분석환경 안에서 작업 흐름을 확장할 수 있도록 구성
+- 사용자가 요청한 작업에 맞게 **파이썬 파일을 생성**
+- 기존 파일 내용을 바탕으로 **코드 수정**
+- 필요한 경우 분석환경에서 **파이썬 실행 흐름까지 연결 가능**
+- 이후 RAG나 실행 결과 요약 기능과 연결하기 쉬운 구조로 정리
 
-기본값은 `infra/web/docker/web.env`에 있습니다.
+즉, 이 프로젝트는 단순히 “AI 답변”만 붙이는 것이 아니라,  
+**AI를 통해 실제 분석환경 안에서 파일 생성/수정/실행 흐름으로 이어질 수 있게 하는 기반 구조**를 목표로 합니다.
 
-- `VITE_API_PROXY`: 웹이 붙을 API 주소
-- `WEB_PORT`: 외부로 열 포트
+### 5. DB 초기화
+- MariaDB 기반
+- `schema.sql` 로 테이블 생성
+- `data.sql` 로 초기 데이터 적재
+- Docker 최초 기동 시 DB 초기화 가능
 
-단일 Docker 실행 기준으로는 웹만 띄우고, API는 별도 호스트나 기존 클러스터 주소를 바라보게 하는 구성이 가장 단순합니다.
+### 6. 실행 인프라 분리
+- Web / API / DB 별 실행 구조 분리
+- Docker와 Kubernetes를 각각 관리 가능
+- 개발 환경과 배포 환경으로 확장 가능한 형태 유지
 
-## Kubernetes로 Web 배포
+---
 
-```bash
-kubectl apply -k infra/web/kubernetes
-```
+## 디렉터리 구조
 
-웹 런타임 환경값은 `infra/web/kubernetes/web.env`를 ConfigMap으로 묶어서 넣습니다.  
-기본 이미지는 `jupiter-web:local`로 두었고, 실제 서버에서는 레지스트리 이미지로 바꿔 쓰면 됩니다.
-
-## Kafka 수집 스크립트
-
-`scripts/admin1_kafka_collector.py`는 `admin1` 디렉터리를 재귀 순회하면서 파일별 JSON 스냅샷을 Kafka로 발행합니다.
-
-예시:
-
-```bash
-python3 scripts/admin1_kafka_collector.py \
-  --source-dir /workspace-data/users/admin1 \
-  --bootstrap-servers localhost:9092 \
-  --topic admin1.directory.snapshots
-```
-
-지원 사항:
-
-- `confluent_kafka` 우선, 없으면 `kafka-python`, 둘 다 없으면 stdout fallback
-- `--dry-run`, `--limit`, `--send-summary`
-- hidden/binary 포함 여부 제어
-- 환경변수 기본값 지원
-
-주요 환경변수:
-
-- `ADMIN1_SOURCE_DIR`
-- `KAFKA_BOOTSTRAP_SERVERS`
-- `KAFKA_TOPIC`
-- `KAFKA_CLIENT_ID`
-- `KAFKA_BACKEND`
-- `ADMIN1_MAX_CONTENT_BYTES`
-- `ADMIN1_INCLUDE_HIDDEN`
-- `ADMIN1_INCLUDE_BINARY`
-
-## 검증 메모
-
-- `apps/web`: `npm run build` 통과
-- `scripts/admin1_kafka_collector.py`: `python3 -m py_compile` 통과
-- `apps/api`: 현재 이 환경에는 `gradle` 바이너리가 없어 로컬 컴파일 검증은 아직 못 했습니다
+```text
+.
+├── apps
+│   ├── web
+│   │   ├── src
+│   │   ├── package.json
+│   │   ├── run-local.sh
+│   │   └── .env.example
+│   └── api
+│       ├── src
+│       ├── build.gradle
+│       ├── run-local.sh
+│       └── .env.example
+├── infra
+│   ├── web
+│   │   ├── docker
+│   │   └── kubernetes
+│   ├── api
+│   │   ├── docker
+│   │   └── kubernetes
+│   ├── db
+│   │   ├── docker
+│   │   │   ├── docker-compose.yml
+│   │   │   └── initdb
+│   │   │       ├── 01-schema.sql
+│   │   │       └── 02-data.sql
+│   │   └── kubernetes
+│   └── gateway
+│       └── kubernetes
+├── docs
+├── scripts
+└── README.md
