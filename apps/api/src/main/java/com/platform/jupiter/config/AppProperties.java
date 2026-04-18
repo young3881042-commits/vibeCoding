@@ -1,0 +1,38 @@
+package com.platform.jupiter.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "app")
+public record AppProperties(
+        String namespace,
+        String registry,
+        String baseImage,
+        String jupyterUrl,
+        String frontendUrl,
+        String apiUrl,
+        String gatewayUrl,
+        String launcherUrl,
+        String adminerUrl,
+        String nexusUrl,
+        String nexusUsername,
+        String nexusPassword,
+        String kafkaUrl,
+        String elkUrl,
+        String pypiProxyUrl,
+        String pypiProxyHost,
+        String externalHost,
+        String notebookUser,
+        String mariadbUrl,
+        String mariadbUsername,
+        String mariadbPassword,
+        String workspaceNode,
+        String workspaceRoot,
+        String snapshotRoot,
+        String ragRoot,
+        String ragSourceRoot,
+        String openAiApiKey,
+        String grokApiKey,
+        String geminiOauthClientId,
+        String geminiOauthClientSecret,
+        String geminiOauthRedirectUri) {
+}

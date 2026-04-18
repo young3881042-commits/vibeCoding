@@ -20,9 +20,9 @@ spec:
           ports:
             - containerPort: 5173
               name: http
-          env:
-            - name: VITE_API_PROXY
-              value: http://jupiter-api:8080
+          envFrom:
+            - configMapRef:
+                name: jupiter-web-env
           readinessProbe:
             tcpSocket:
               port: 5173
