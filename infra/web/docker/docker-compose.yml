@@ -2,7 +2,7 @@ services:
   web:
     build:
       context: ../../../apps/web
-      dockerfile: /root/infra/web/docker/Dockerfile
+      dockerfile: ../../infra/web/docker/Dockerfile
     image: jupiter-web:local
     env_file:
       - web.env

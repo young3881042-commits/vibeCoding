@@ -1,0 +1,10 @@
+namespace: jupiter
+
+configMapGenerator:
+  - name: jupiter-api-env
+    envs:
+      - api.env
+
+resources:
+  - deployment.yaml
+  - service.yaml
