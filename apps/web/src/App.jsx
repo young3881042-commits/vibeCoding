@@ -433,7 +433,7 @@ function FileList({
   };
 
   return (
-    <section className="browserListPanel" onContextMenu={(event) => onContextMenu(event, currentTree.currentPath || '', false, false)}>
+    <section className="browserListPanel" onContextMenu={(event) => onContextMenu(event, currentTree.currentPath || '', false, false, false)}>
       <div className="panelTop simple">
         <div className="listActionBar">
           <button type="button" className="iconButton actionIconButton" title="상위 폴더로 이동" aria-label="상위 폴더로 이동" onClick={onGoParent}>
@@ -465,7 +465,7 @@ function FileList({
           <div
             key={entry.path}
             className={`entryRow ${selectedFile === entry.path || selectedPath === entry.path ? 'active' : ''}`}
-            onContextMenu={(event) => onContextMenu(event, entry.path, entry.type === 'file', true)}
+            onContextMenu={(event) => onContextMenu(event, entry.path, entry.type === 'file', true, true)}
           >
             <div
               role="button"
@@ -606,6 +606,9 @@ function FileList({
             >
               이름 변경
             </button>
+          ) : null}
+          {contextMenu.deleteTargetPath ? (
+            <button type="button" className="dangerMenuAction" onClick={contextMenu.onDelete}>삭제</button>
           ) : null}
           <button type="button" onClick={contextMenu.onNewFile}>새 파일</button>
           <button type="button" onClick={contextMenu.onNewFolder}>새 폴더</button>
@@ -931,6 +934,38 @@ export default function App() {
     }
   };
 
+  const handleDeletePath = async (path) => {
+    if (!path) return;
+    const targetLabel = labelForPath(path);
+    const confirmed = window.confirm(`'${targetLabel}' 항목을 삭제할까요?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const parent = parentPathOf(path);
+    try {
+      await requestJson(`/api/workspace/item?path=${encodeURIComponent(path)}`, {
+        method: 'DELETE',
+        headers: authHeaders(auth.token)
+      });
+
+      if (selectedFile === path || selectedFile.startsWith(`${path}/`)) {
+        setSelectedFile('');
+        setContent('');
+      }
+
+      if (selectedPath === path || selectedPath.startsWith(`${path}/`)) {
+        setSelectedPath(parent);
+        await loadTree(parent, true);
+        return;
+      }
+
+      await loadTree(parent || selectedPath, true);
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  };
+
   const handleDownload = async () => {
     if (!selectedFile) return;
     const response = await fetch(`/api/workspace/download?path=${encodeURIComponent(selectedFile)}`, {
@@ -1142,7 +1177,7 @@ export default function App() {
     }
   };
 
-  const openContextMenu = (event, targetPath, isFileTarget, allowRename = false) => {
+  const openContextMenu = (event, targetPath, isFileTarget, allowRename = false, allowDelete = false) => {
     event.preventDefault();
     event.stopPropagation();
     const basePath = isFileTarget ? parentPathOf(targetPath) : targetPath;
@@ -1150,6 +1185,7 @@ export default function App() {
       x: event.clientX,
       y: event.clientY,
       renameTargetPath: allowRename ? targetPath : '',
+      deleteTargetPath: allowDelete ? targetPath : '',
       onClose: () => setContextMenu(null),
       onNewFile: () => {
         setContextMenu(null);
@@ -1171,6 +1207,10 @@ export default function App() {
           setSelectedPath(basePath);
         }
         uploadRef.current?.click();
+      },
+      onDelete: async () => {
+        setContextMenu(null);
+        await handleDeletePath(targetPath);
       },
       onRefresh: handleRefresh
     });

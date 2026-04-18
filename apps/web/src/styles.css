@@ -2053,6 +2053,14 @@ body {
   background: #f2f7ff;
 }
 
+.contextMenu .dangerMenuAction {
+  color: #b42318;
+}
+
+.contextMenu .dangerMenuAction:hover {
+  background: #fff3f2;
+}
+
 .ghostButton.active {
   background: #ebf3ff;
   border-color: #bed4f7;
