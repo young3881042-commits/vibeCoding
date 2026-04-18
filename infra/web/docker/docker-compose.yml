@@ -1,0 +1,12 @@
+services:
+  web:
+    build:
+      context: ../../../apps/web
+      dockerfile: ../../../infra/web/docker/Dockerfile
+    image: jupiter-web:local
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_PROXY: http://host.docker.internal:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
