@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 async function api(path, { token, headers, ...init } = {}) {
   const response = await fetch(path, {
@@ -19,6 +19,10 @@ function labelForPath(path) {
   if (!path) return 'Workspace';
   const tokens = path.split('/').filter(Boolean);
   return tokens[tokens.length - 1] || 'Workspace';
+}
+
+function workspacePathFor(path) {
+  return path ? `/workspace/${path}` : '/workspace';
 }
 
 function GeminiTurn({ turn }) {
@@ -93,33 +97,7 @@ export default function GeminiApp({
   const [message, setMessage] = useState('');
   const scrollRef = useRef(null);
 
-  const contextLabel = filePath
-    ? `현재 파일 · ${filePath}`
-    : directoryPath
-      ? `현재 폴더 · ${directoryPath}`
-      : '워크스페이스 루트';
-
-  const suggestions = useMemo(() => {
-    if (filePath) {
-      return [
-        `${labelForPath(filePath)} 구조를 빠르게 설명해줘`,
-        `${labelForPath(filePath)}를 더 읽기 쉽게 정리해줘`,
-        `${labelForPath(filePath)} 기준으로 다음 수정안을 제안해줘`
-      ];
-    }
-    if (directoryPath) {
-      return [
-        '현재 폴더 구조를 보고 해야 할 작업을 정리해줘',
-        '현재 폴더에서 중요한 파일부터 읽고 개선 포인트를 정리해줘',
-        '현재 폴더 기준으로 문서와 코드 구조를 더 직관적으로 바꿔줘'
-      ];
-    }
-    return [
-      '현재 워크스페이스에서 가장 먼저 정리할 부분을 찾아줘',
-      '이 저장소를 빠르게 파악하고 작업 순서를 제안해줘',
-      '현재 기준으로 README 초안을 만들어줘'
-    ];
-  }, [directoryPath, filePath]);
+  const contextPath = workspacePathFor(directoryPath || (filePath ? filePath.split('/').slice(0, -1).join('/') : ''));
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -152,61 +130,16 @@ export default function GeminiApp({
   return (
     <main className={`assistantShell ${embedded ? 'embedded' : ''}`}>
       <section className="assistantPanel">
-        <header className="assistantHeader">
-          <div>
-            <span className="assistantLabel">Gemini Workspace</span>
-            <h1>지금 선택한 경로에 바로 작업 요청</h1>
-            <p className="assistantSubcopy">{contextLabel}</p>
-          </div>
+        <header className="assistantHeader assistantHeaderMinimal">
+          <code className="assistantPathPill">{contextPath}</code>
           <div className="assistantHeaderActions">
-            <span className="assistantBadge">gprompt bridge</span>
             <button type="button" className="ghostButton compact" onClick={() => setTurns([])} disabled={!turns.length || loading}>
               Clear
             </button>
           </div>
         </header>
 
-        {!turns.length ? (
-          <section className="assistantHero">
-            <div className="assistantHeroCard">
-              <strong>즉시 실행</strong>
-              <p>현재 파일이나 폴더를 기준으로 Gemini CLI를 바로 호출합니다.</p>
-            </div>
-            <div className="assistantHeroCard">
-              <strong>맥락 유지</strong>
-              <p>파일을 선택하면 그 상위 폴더에서, 폴더를 고르면 그 폴더에서 실행합니다.</p>
-            </div>
-            <div className="assistantHeroCard">
-              <strong>결과 중심</strong>
-              <p>터미널 로그 대신 요청과 응답을 카드형 대화로 정리해 보여줍니다.</p>
-            </div>
-          </section>
-        ) : null}
-
-        <div className="assistantSuggestionRail">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              className="assistantSuggestion"
-              disabled={loading}
-              onClick={() => {
-                setPrompt(suggestion);
-                handleSubmit(suggestion);
-              }}
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-
         <div className="assistantStream" ref={scrollRef}>
-          {!turns.length ? (
-            <section className="assistantEmpty">
-              <h2>Gemini에게 바로 시켜보세요</h2>
-              <p>파일 수정, 요약, 구조 정리 같은 요청을 현재 경로 기준으로 실행합니다.</p>
-            </section>
-          ) : null}
           {turns.map((turn, index) => (
             <GeminiTurn key={`${turn.role}-${index}`} turn={turn} />
           ))}

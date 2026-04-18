@@ -39,6 +39,10 @@ function labelForPath(path) {
   return tokens[tokens.length - 1] || 'Workspace';
 }
 
+function workspacePathFor(path) {
+  return path ? `/workspace/${path}` : '/workspace';
+}
+
 function extensionForPath(path) {
   const fileName = labelForPath(path);
   const index = fileName.lastIndexOf('.');
@@ -246,6 +250,31 @@ function Sidebar({ auth, onOpenLauncher, onLogout, selectedPath, expandedPaths, 
         })}
       </div>
     </aside>
+  );
+}
+
+function WorkspaceHeader({ auth, selectedPath, onOpenLauncher, onLogout }) {
+  return (
+    <header className="workspaceTopbar">
+      <section className="workspacePathCard">
+        <span className="panelEyebrow">Current Directory</span>
+        <code className="workspacePathCode">{workspacePathFor(selectedPath)}</code>
+      </section>
+      <div className="workspaceUserTray">
+        <div className="workspaceUserCard">
+          <span>{auth.role}</span>
+          <strong>{auth.username}</strong>
+        </div>
+        {auth.launcherUrl ? (
+          <button type="button" className="ghostButton" onClick={onOpenLauncher}>
+            Launcher
+          </button>
+        ) : null}
+        <button type="button" className="ghostButton" onClick={onLogout}>
+          Logout
+        </button>
+      </div>
+    </header>
   );
 }
 
@@ -522,6 +551,7 @@ function EditorPanel({ selectedFile, content, setContent, loading, error, output
                 path={selectedFile}
                 value={content}
                 onChange={(value) => setContent(value)}
+                onSave={onSave}
               />
             </Suspense>
           </div>
@@ -1005,16 +1035,11 @@ export default function App() {
   return (
     <main className="workspaceBrowserShell">
       <input ref={uploadRef} type="file" hidden onChange={handleUpload} />
-      <Sidebar
+      <WorkspaceHeader
         auth={auth}
+        selectedPath={selectedPath}
         onOpenLauncher={() => auth.launcherUrl && window.open(auth.launcherUrl, '_blank', 'noopener,noreferrer')}
         onLogout={handleLogout}
-        selectedPath={selectedPath}
-        expandedPaths={expandedPaths}
-        treeMap={treeMap}
-        loadingPaths={loadingPaths}
-        onToggle={handleToggle}
-        onSelect={handleSelectDir}
       />
       <FileList
         currentTree={currentTree}

@@ -1,5 +1,5 @@
 import CodeMirror from '@uiw/react-codemirror';
-import { vscodeDark } from '@uiw/codemirror-theme-vscode';
+import { vscodeLight } from '@uiw/codemirror-theme-vscode';
 import { css as cssLanguage } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
 import { java } from '@codemirror/lang-java';
@@ -7,7 +7,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
 import { markdown } from '@codemirror/lang-markdown';
 import { python } from '@codemirror/lang-python';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import { xml } from '@codemirror/lang-xml';
 import { yaml } from '@codemirror/lang-yaml';
 
@@ -65,13 +65,25 @@ const noBlinkCursorTheme = EditorView.theme({
   }
 });
 
-export default function CodeEditor({ path, value, onChange }) {
+function saveKeymap(onSave) {
+  return keymap.of([{
+    key: 'Mod-s',
+    run: () => {
+      if (typeof onSave === 'function') {
+        onSave();
+      }
+      return true;
+    }
+  }]);
+}
+
+export default function CodeEditor({ path, value, onChange, onSave }) {
   return (
     <CodeMirror
       value={value}
       height="100%"
-      theme={vscodeDark}
-      extensions={[...languageExtensionsForPath(path), noBlinkCursorTheme]}
+      theme={vscodeLight}
+      extensions={[...languageExtensionsForPath(path), noBlinkCursorTheme, saveKeymap(onSave)]}
       onChange={onChange}
       basicSetup={{
         lineNumbers: true,
