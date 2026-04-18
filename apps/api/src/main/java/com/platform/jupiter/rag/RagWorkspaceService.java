@@ -103,12 +103,12 @@ public class RagWorkspaceService {
             }
             return new RagAnswerResponse(question, answer, citations, Instant.now());
         } catch (Exception exception) {
-            RagAnswerResponse fallback = ragService.answer(new RagQueryRequest(question, topK));
-            if (!fallback.answer().isBlank()) {
+            String fallbackAnswer = synthesizeFallbackAnswer(question, retrieval.candidates(), workspaceContext);
+            if (!fallbackAnswer.isBlank()) {
                 return new RagAnswerResponse(
                         question,
-                        fallback.answer(),
-                        mergeCitations(fallback.citations(), workspaceContext.citations()),
+                        fallbackAnswer,
+                        citations,
                         Instant.now());
             }
             if (!workspaceContext.citations().isEmpty()) {
@@ -266,6 +266,41 @@ public class RagWorkspaceService {
             }
         }
         return builder.toString().trim();
+    }
+
+    private String synthesizeFallbackAnswer(
+            String question,
+            List<RagService.RagContextChunk> chunks,
+            WorkspaceContext workspaceContext) {
+        List<String> lines = new ArrayList<>();
+        lines.add("현재 서버에서 Gemini가 연결되지 않아 로컬 RAG 결과로 정리했습니다.");
+        lines.add("질문: " + question.trim());
+
+        if (!workspaceContext.items().isEmpty()) {
+            lines.add("");
+            lines.add("현재 선택 경로 기준");
+            for (int index = 0; index < workspaceContext.items().size(); index++) {
+                WorkspaceContextItem item = workspaceContext.items().get(index);
+                lines.add((index + 1) + ". " + item.path() + ": " + abbreviate(item.content(), 220));
+            }
+        }
+
+        if (!chunks.isEmpty()) {
+            lines.add("");
+            lines.add("관련 색인 문서 기준");
+            for (int index = 0; index < Math.min(chunks.size(), 3); index++) {
+                RagService.RagContextChunk chunk = chunks.get(index);
+                lines.add((index + 1) + ". " + chunk.documentTitle() + ": " + abbreviate(chunk.text(), 220));
+            }
+        }
+
+        if (workspaceContext.items().isEmpty() && chunks.isEmpty()) {
+            return "";
+        }
+
+        lines.add("");
+        lines.add("상세 근거는 아래 출처 목록에서 확인할 수 있습니다.");
+        return String.join("\n", lines).trim();
     }
 
     private List<RagCitation> mergeCitations(List<RagCitation> ragCitations, List<RagCitation> workspaceCitations) {

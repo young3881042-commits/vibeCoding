@@ -12,6 +12,11 @@ function authHeaders(token) {
 async function requestJson(path, options = {}) {
   const response = await fetch(path, options);
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/api/auth/')) {
+      localStorage.removeItem(AUTH_KEY);
+      window.location.reload();
+      throw new Error('Session expired');
+    }
     throw new Error((await response.text()) || `HTTP ${response.status}`);
   }
   const text = await response.text();
@@ -24,6 +29,11 @@ async function requestJson(path, options = {}) {
 async function requestText(path, token) {
   const response = await fetch(path, { headers: authHeaders(token) });
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/api/auth/')) {
+      localStorage.removeItem(AUTH_KEY);
+      window.location.reload();
+      throw new Error('Session expired');
+    }
     throw new Error((await response.text()) || `HTTP ${response.status}`);
   }
   return response.text();
@@ -253,7 +263,72 @@ function Sidebar({ auth, onOpenLauncher, onLogout, selectedPath, expandedPaths, 
   );
 }
 
-function WorkspaceHeader({ auth, selectedPath, onOpenLauncher, onLogout }) {
+function AccountEditDialog({
+  auth,
+  open,
+  loading,
+  error,
+  currentPassword,
+  newPassword,
+  confirmPassword,
+  onCurrentPassword,
+  onNewPassword,
+  onConfirmPassword,
+  onClose,
+  onSubmit
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <section className="accountDialog" onClick={(event) => event.stopPropagation()}>
+        <div className="accountDialogHeader">
+          <div>
+            <span className="panelEyebrow">Account Edit</span>
+            <h2>{auth.username}</h2>
+            <p className="panelSubcopy">비밀번호를 변경할 수 있습니다.</p>
+          </div>
+          <button type="button" className="ghostButton compact" onClick={onClose}>닫기</button>
+        </div>
+        <div className="accountDialogBody">
+          <label className="loginField">
+            <span>Current Password</span>
+            <input type="password" value={currentPassword} onChange={(event) => onCurrentPassword(event.target.value)} placeholder="현재 비밀번호" />
+          </label>
+          <label className="loginField">
+            <span>New Password</span>
+            <input type="password" value={newPassword} onChange={(event) => onNewPassword(event.target.value)} placeholder="새 비밀번호" />
+          </label>
+          <label className="loginField">
+            <span>Confirm Password</span>
+            <input type="password" value={confirmPassword} onChange={(event) => onConfirmPassword(event.target.value)} placeholder="새 비밀번호 확인" />
+          </label>
+          {error ? <div className="loginHint">{error}</div> : null}
+        </div>
+        <div className="accountDialogFooter">
+          <button type="button" className="ghostButton" onClick={onClose}>취소</button>
+          <button type="button" className="sendButton" onClick={onSubmit} disabled={loading}>
+            {loading ? '저장 중...' : '저장'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function WorkspaceHeader({
+  auth,
+  selectedPath,
+  rightPanel,
+  setRightPanel,
+  userMenuOpen,
+  setUserMenuOpen,
+  onOpenLauncher,
+  onOpenAccountEdit,
+  onLogout
+}) {
   return (
     <header className="workspaceTopbar">
       <section className="workspacePathCard">
@@ -261,18 +336,38 @@ function WorkspaceHeader({ auth, selectedPath, onOpenLauncher, onLogout }) {
         <code className="workspacePathCode">{workspacePathFor(selectedPath)}</code>
       </section>
       <div className="workspaceUserTray">
-        <div className="workspaceUserCard">
-          <span>{auth.role}</span>
-          <strong>{auth.username}</strong>
+        <div className="workspaceTopTabs">
+          <button type="button" className={`ghostButton compact ${rightPanel === 'rag' ? 'active' : ''}`} onClick={() => setRightPanel('rag')}>RAG</button>
+          <button type="button" className={`ghostButton compact ${rightPanel === 'gemini' ? 'active' : ''}`} onClick={() => setRightPanel('gemini')}>Gemini</button>
+          <button type="button" className={`ghostButton compact ${rightPanel === 'editor' ? 'active' : ''}`} onClick={() => setRightPanel('editor')}>파일 편집기</button>
+          {auth.role === 'ADMIN' ? (
+            <button type="button" className={`ghostButton compact ${rightPanel === 'monitor' ? 'active' : ''}`} onClick={() => setRightPanel('monitor')}>모니터링</button>
+          ) : null}
         </div>
         {auth.launcherUrl ? (
           <button type="button" className="ghostButton" onClick={onOpenLauncher}>
             Launcher
           </button>
         ) : null}
-        <button type="button" className="ghostButton" onClick={onLogout}>
-          Logout
-        </button>
+        <div className="userMenuWrap">
+          <button
+            type="button"
+            className={`workspaceUserButton ${userMenuOpen ? 'open' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setUserMenuOpen((current) => !current);
+            }}
+          >
+            <span>{auth.role}</span>
+            <strong>{auth.username}</strong>
+          </button>
+          {userMenuOpen ? (
+            <div className="userMenuDropdown" onClick={(event) => event.stopPropagation()}>
+              <button type="button" onClick={onOpenAccountEdit}>Edit</button>
+              <button type="button" onClick={onLogout}>Logout</button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </header>
   );
@@ -635,6 +730,13 @@ export default function App() {
   const [createDraft, setCreateDraft] = useState(null);
   const [activeMonitor, setActiveMonitor] = useState('grafana');
   const [rightPanel, setRightPanel] = useState('gemini');
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [accountEditOpen, setAccountEditOpen] = useState(false);
+  const [accountEditLoading, setAccountEditLoading] = useState(false);
+  const [accountEditError, setAccountEditError] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [pythonOutput, setPythonOutput] = useState({
     file: '',
     command: '',
@@ -674,7 +776,10 @@ export default function App() {
   }, [auth?.token]);
 
   useEffect(() => {
-    const closeMenu = () => setContextMenu(null);
+    const closeMenu = () => {
+      setContextMenu(null);
+      setUserMenuOpen(false);
+    };
     window.addEventListener('click', closeMenu);
     return () => window.removeEventListener('click', closeMenu);
   }, []);
@@ -875,6 +980,12 @@ export default function App() {
     setAuthError('');
     setExpandedPaths([]);
     setContextMenu(null);
+    setUserMenuOpen(false);
+    setAccountEditOpen(false);
+    setAccountEditError('');
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
     setCreateDraft(null);
     setRightPanel('editor');
     setPythonOutput({
@@ -886,6 +997,55 @@ export default function App() {
       timedOut: false,
       running: false
     });
+  };
+
+  const openAccountEdit = () => {
+    setUserMenuOpen(false);
+    setAccountEditError('');
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setAccountEditOpen(true);
+  };
+
+  const closeAccountEdit = () => {
+    setAccountEditOpen(false);
+    setAccountEditError('');
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const submitAccountEdit = async () => {
+    if (accountEditLoading) {
+      return;
+    }
+    if (!currentPassword.trim()) {
+      setAccountEditError('현재 비밀번호를 입력하세요.');
+      return;
+    }
+    if (newPassword.length < 4) {
+      setAccountEditError('새 비밀번호는 4자 이상이어야 합니다.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setAccountEditError('새 비밀번호 확인이 일치하지 않습니다.');
+      return;
+    }
+    setAccountEditLoading(true);
+    setAccountEditError('');
+    try {
+      await requestJson('/api/auth/account/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(auth.token) },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      closeAccountEdit();
+    } catch (submitError) {
+      setAccountEditError(submitError.message);
+    } finally {
+      setAccountEditLoading(false);
+    }
   };
 
   const handleRefresh = async () => {
@@ -1038,7 +1198,12 @@ export default function App() {
       <WorkspaceHeader
         auth={auth}
         selectedPath={selectedPath}
+        rightPanel={rightPanel}
+        setRightPanel={setRightPanel}
+        userMenuOpen={userMenuOpen}
+        setUserMenuOpen={setUserMenuOpen}
         onOpenLauncher={() => auth.launcherUrl && window.open(auth.launcherUrl, '_blank', 'noopener,noreferrer')}
+        onOpenAccountEdit={openAccountEdit}
         onLogout={handleLogout}
       />
       <FileList
@@ -1062,14 +1227,6 @@ export default function App() {
         contextMenu={contextMenu}
       />
       <div className="rightPanelStack">
-        <div className="chatHeaderActions rightPanelTabs">
-          <button type="button" className={`ghostButton compact ${rightPanel === 'rag' ? 'active' : ''}`} onClick={() => setRightPanel('rag')}>rag</button>
-          <button type="button" className={`ghostButton compact ${rightPanel === 'gemini' ? 'active' : ''}`} onClick={() => setRightPanel('gemini')}>gemini</button>
-          <button type="button" className={`ghostButton compact ${rightPanel === 'editor' ? 'active' : ''}`} onClick={() => setRightPanel('editor')}>파일 편집기</button>
-          {auth.role === 'ADMIN' ? (
-            <button type="button" className={`ghostButton compact ${rightPanel === 'monitor' ? 'active' : ''}`} onClick={() => setRightPanel('monitor')}>모니터링</button>
-          ) : null}
-        </div>
         <div className={rightPanel === 'gemini' ? 'panelVisible' : 'panelHidden'}>
           <Suspense fallback={<div className="previewState">Gemini를 불러오는 중입니다.</div>}>
             <LazyGeminiApp
@@ -1115,6 +1272,20 @@ export default function App() {
           </div>
         ) : null}
       </div>
+      <AccountEditDialog
+        auth={auth}
+        open={accountEditOpen}
+        loading={accountEditLoading}
+        error={accountEditError}
+        currentPassword={currentPassword}
+        newPassword={newPassword}
+        confirmPassword={confirmPassword}
+        onCurrentPassword={setCurrentPassword}
+        onNewPassword={setNewPassword}
+        onConfirmPassword={setConfirmPassword}
+        onClose={closeAccountEdit}
+        onSubmit={submitAccountEdit}
+      />
     </main>
   );
 }

@@ -4,6 +4,8 @@ WORKDIR /app
 
 ENV NODE_ENV=development
 
+RUN apk add --no-cache python3
+
 COPY package.json package-lock.json ./
 RUN npm ci
 

@@ -2,6 +2,7 @@ package com.platform.jupiter.web;
 
 import com.platform.jupiter.auth.AuthLoginRequest;
 import com.platform.jupiter.auth.AuthResponse;
+import com.platform.jupiter.auth.AccountPasswordUpdateRequest;
 import com.platform.jupiter.auth.AuthService;
 import com.platform.jupiter.auth.AuthSession;
 import com.platform.jupiter.auth.AuthSignupRequest;
@@ -173,6 +174,13 @@ public class JupiterController {
     @PostMapping("/auth/login")
     public AuthResponse login(@Valid @RequestBody AuthLoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/auth/account/password")
+    public ResponseEntity<Void> updatePassword(@Valid @RequestBody AccountPasswordUpdateRequest request, HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        authService.updatePassword(session.username(), request);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/builds")

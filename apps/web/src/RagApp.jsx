@@ -94,7 +94,7 @@ function RagComposer({ loading, question, setQuestion, onSubmit }) {
         }}
       />
       <div className="assistantComposerBar">
-        <span>Gemini + 현재 워크스페이스 문맥 + 업로드 문서 검색을 함께 사용합니다.</span>
+        <span>업로드 문서와 현재 선택 경로를 함께 참조합니다.</span>
         <button type="submit" className="ragSendButton" disabled={loading}>
           {loading ? 'Searching' : 'Ask RAG'}
         </button>
@@ -307,7 +307,7 @@ export default function RagApp({
         <header className="assistantHeader">
           <div>
             <span className="assistantLabel">RAG Workspace</span>
-            <h1>선택한 폴더와 문서를 같이 읽는 문서형 Gemini</h1>
+            <h1>선택한 폴더와 문서를 같이 읽는 RAG</h1>
             <p className="assistantSubcopy">{contextLabel}</p>
           </div>
           <div className="assistantHeaderActions">
@@ -372,7 +372,7 @@ export default function RagApp({
           {!turns.length ? (
             <section className="assistantEmpty">
               <h2>문서와 현재 선택 경로를 같이 참조합니다</h2>
-              <p>업로드 문서, 현재 폴더, 현재 파일을 같이 엮어 답을 찾습니다.</p>
+              <p>업로드 문서, 현재 폴더, 현재 파일을 함께 묶어 답을 정리합니다.</p>
             </section>
           ) : null}
           {turns.map((turn, index) => <RagMessage key={`${turn.role}-${index}`} turn={turn} />)}
@@ -380,7 +380,7 @@ export default function RagApp({
             <article className="assistantTurn assistant">
               <div className="assistantAvatar assistant">R</div>
               <div className="assistantBubble assistant loading">
-                <p>관련 문서와 현재 선택 경로를 함께 검색하고 있습니다.</p>
+                <p>관련 문서와 현재 선택 경로를 함께 정리하고 있습니다.</p>
               </div>
             </article>
           ) : null}

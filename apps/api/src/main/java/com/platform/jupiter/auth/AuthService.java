@@ -119,6 +119,20 @@ public class AuthService {
         return session;
     }
 
+    @Transactional
+    public void updatePassword(String username, AccountPasswordUpdateRequest request) {
+        AppUserAccount account = repository.findByUsername(normalizeUsername(username))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (!passwordEncoder.matches(request.currentPassword(), account.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다.");
+        }
+        if (request.currentPassword().equals(request.newPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "새 비밀번호는 현재 비밀번호와 달라야 합니다.");
+        }
+        account.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        repository.save(account);
+    }
+
     private String normalizeUsername(String username) {
         return username.trim().toLowerCase(Locale.ROOT);
     }
