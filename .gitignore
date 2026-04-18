@@ -8,11 +8,11 @@
 !/scripts/
 !/scripts/**
 
-/apps/**/node_modules/
-/apps/**/dist/
-/apps/**/build/
-/apps/**/.gradle/
-/apps/**/.env
+/apps/*/node_modules/
+/apps/*/dist/
+/apps/*/build/
+/apps/*/.gradle/
+/apps/*/.env
 /infra/**/.env
 **/__pycache__/
 *.pyc
