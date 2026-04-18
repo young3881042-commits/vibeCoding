@@ -1,6 +1,9 @@
+<img width="1916" height="975" alt="image" src="https://github.com/user-attachments/assets/752ecd77-8075-4bb5-b945-4e2086389b93" /> 
+<img width="1915" height="1037" alt="image" src="https://github.com/user-attachments/assets/d8ce5b6d-7f68-4a75-bdc9-4d17568dc651" />
+
 # Jupiter Workspace
 
-Jupiter Workspace는 분석 업무용 웹 UI, API, DB, 실행 인프라를 한 저장소에서 관리하기 위해 정리한 프로젝트입니다.
+Jupiter Workspace는 분석 업무용 웹 UI, API, DB, 실행 인프라를 한 저장소에서 Google Api를 사용하기 위해 정리한 프로젝트입니다.
 
 기존처럼 홈 디렉터리 전체를 그대로 옮기는 방식이 아니라, 실제로 관리해야 하는 코드와 실행 구성만 남겨서 **재현 가능하고 설명 가능한 구조**로 다시 정리했습니다.
 
