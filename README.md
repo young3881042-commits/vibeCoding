@@ -2,6 +2,23 @@
 
 이 저장소는 홈 디렉터리 덤프를 그대로 올리지 않고, 실제로 관리할 코드와 실행 인프라만 남기는 구조로 정리했습니다.
 
+## 왜 이 기술들을 쓰는가
+
+- `React + Vite`
+  빠르게 화면을 바꾸고, 채팅형 UI처럼 반복 수정이 많은 프론트 작업에 빌드/개발 속도가 좋습니다.
+- `Spring Boot`
+  인증, 파일 처리, RAG API, 외부 모델 연동을 한 서버에서 안정적으로 묶기 쉽고, 운영형 백엔드로 구조를 잡기 좋습니다.
+- `MariaDB`
+  세션, 사용자 설정, 채팅 자격정보 같은 정형 데이터를 다루기에 충분하고 현재 클러스터 운영 방식과도 잘 맞습니다.
+- `Qdrant`
+  문서/날씨 chunk를 벡터 검색으로 바로 붙이기 쉽고, RAG 실험을 빠르게 API 레벨로 연결하기 좋습니다.
+- `Gemini`
+  검색 결과를 그대로 보여주는 수준이 아니라, 검색 문맥을 붙여 자연어 답변을 생성하는 LLM 역할로 씁니다.
+- `Kubernetes`
+  `web`, `api`, `mariadb`, `qdrant`를 분리 배포하고 서비스별로 재시작/확장/상태 확인을 하기에 가장 편합니다.
+- `Jenkins`
+  지금 구조처럼 소스 Secret 갱신 + rollout restart 방식 배포를 표준화하기 좋고, 반복 수작업을 줄이는 데 효과가 큽니다.
+
 ## 왜 `infra/web/{docker,kubernetes}` 인가
 
 `kube-infra/`와 `docker-infra/`를 루트에서 나누면 같은 웹 서비스의 실행 방식만 달라져도 파일이 흩어집니다.  
@@ -75,7 +92,25 @@ kubectl apply -k infra/web/kubernetes
 - Web: `jupiter-frontend-archive-source`
 
 Jenkins 잡은 Pipeline from SCM 또는 Multibranch Pipeline으로 연결하면 됩니다.
-Webhook을 연결하면 `develop` push 시 자동으로 배포됩니다.
+현재 Jenkins 환경은 `GitHub push trigger` 플러그인이 없어 `pollSCM` 방식으로 자동 감시합니다.
+
+## 현재 진행 사항
+
+- [x] RAG 웹 UI를 채팅 중심 화면으로 단순화
+- [x] 문서 + 날씨 데이터 색인 및 Qdrant 벡터 검색 연결
+- [x] Gemini RAG 응답 경로와 서버 기본 인증 fallback 코드 추가
+- [x] `develop` 기준 Jenkins 배포 파이프라인, 배포 스크립트, 스모크 테스트 추가
+- [x] Jenkins 잡 `vibeCoding-develop` 등록
+- [ ] Jenkins `vibeCoding-develop` 파이프라인 최종 성공 재확인
+- [ ] 서버 공용 Gemini 자격정보(`APP_GEMINI_API_KEY` 또는 운영용 OAuth) 주입
+- [ ] 실시간 날씨 API 외부 연결 안정화
+
+## 앞으로 할 일
+
+- [ ] `jupiter-gemini-api-key` 또는 운영용 Gemini OAuth 시크릿을 클러스터에 고정
+- [ ] `/api/rag/query` 실호출 기준 Gemini 응답/인용 품질 점검
+- [ ] 날씨 API 실패 시 내부 프록시 또는 캐시 갱신 경로 추가
+- [ ] Jenkins 빌드 결과를 기준으로 실패 알림이나 롤백 기준 정리
 
 ## Kafka 수집 스크립트
 
