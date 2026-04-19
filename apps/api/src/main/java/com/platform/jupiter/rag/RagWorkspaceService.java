@@ -1,22 +1,14 @@
 package com.platform.jupiter.rag;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.jupiter.chat.ChatCredentialService;
 import com.platform.jupiter.files.FileService;
 import com.platform.jupiter.files.FileTreeEntry;
 import com.platform.jupiter.files.FileTreeResponse;
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.text.Normalizer;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -44,18 +36,12 @@ public class RagWorkspaceService {
 
     private final RagService ragService;
     private final FileService fileService;
-    private final ChatCredentialService chatCredentialService;
-    private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final GeminiRagService geminiRagService;
 
-    public RagWorkspaceService(RagService ragService, FileService fileService, ChatCredentialService chatCredentialService, ObjectMapper objectMapper) {
+    public RagWorkspaceService(RagService ragService, FileService fileService, GeminiRagService geminiRagService) {
         this.ragService = ragService;
         this.fileService = fileService;
-        this.chatCredentialService = chatCredentialService;
-        this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(20))
-                .build();
+        this.geminiRagService = geminiRagService;
     }
 
     public RagWorkspaceResponse answerAndSave(RagWorkspaceRequest request, String username, boolean admin) {
@@ -97,7 +83,7 @@ public class RagWorkspaceService {
         List<RagCitation> citations = mergeCitations(retrieval.citations(), workspaceContext.citations());
         try {
             String prompt = buildPrompt(question, retrieval.candidates(), workspaceContext);
-            String answer = requestGemini(prompt, username);
+            String answer = geminiRagService.generate(prompt, username);
             if (answer.isBlank()) {
                 throw new IllegalStateException("empty gemini answer");
             }
@@ -159,15 +145,28 @@ public class RagWorkspaceService {
         }
 
         StringBuilder listing = new StringBuilder();
+        listing.append("Current folder path: ")
+                .append(tree.currentPath() == null || tree.currentPath().isBlank() ? "/" : tree.currentPath())
+                .append("\n");
         listing.append("Current folder entries:\n");
         List<FileTreeEntry> entries = tree.entries();
-        for (int index = 0; index < Math.min(entries.size(), 10); index++) {
-            FileTreeEntry entry = entries.get(index);
-            listing.append("- ")
-                    .append(entry.type())
-                    .append(": ")
-                    .append(entry.path())
-                    .append("\n");
+        if (entries.isEmpty()) {
+            listing.append("(empty)\n");
+        } else {
+            for (int index = 0; index < Math.min(entries.size(), 30); index++) {
+                FileTreeEntry entry = entries.get(index);
+                listing.append("- ")
+                        .append(entry.type())
+                        .append(": ")
+                        .append(entry.name())
+                        .append(" [")
+                        .append(entry.path())
+                        .append("]");
+                if ("file".equals(entry.type())) {
+                    listing.append(" size=").append(entry.size());
+                }
+                listing.append("\n");
+            }
         }
         String directorySummary = listing.toString().trim();
         items.add(new WorkspaceContextItem(
@@ -233,6 +232,7 @@ public class RagWorkspaceService {
     private String buildPrompt(String question, List<RagService.RagContextChunk> chunks, WorkspaceContext workspaceContext) {
         StringBuilder builder = new StringBuilder();
         builder.append("You are a RAG assistant for a Korean portfolio workspace.\n");
+        builder.append("If the user asks what files or folders exist in the current path, answer from the current workspace selection directly and list them explicitly.\n");
         builder.append("Answer from the current workspace selection first when it is relevant.\n");
         builder.append("Then use indexed RAG context.\n");
         builder.append("If the available context is empty or insufficient, answer from general knowledge and explicitly say that the indexed docs or workspace selection did not fully cover it.\n");
@@ -272,6 +272,10 @@ public class RagWorkspaceService {
             String question,
             List<RagService.RagContextChunk> chunks,
             WorkspaceContext workspaceContext) {
+        if (isDirectoryListingQuestion(question) && !workspaceContext.items().isEmpty()) {
+            return synthesizeDirectoryListingAnswer(workspaceContext);
+        }
+
         List<String> lines = new ArrayList<>();
         lines.add("현재 서버에서 Gemini가 연결되지 않아 로컬 RAG 결과로 정리했습니다.");
         lines.add("질문: " + question.trim());
@@ -303,56 +307,39 @@ public class RagWorkspaceService {
         return String.join("\n", lines).trim();
     }
 
+    private String synthesizeDirectoryListingAnswer(WorkspaceContext workspaceContext) {
+        WorkspaceContextItem item = workspaceContext.items().get(0);
+        List<String> lines = new ArrayList<>();
+        lines.add("현재 경로의 항목입니다.");
+        for (String line : item.content().split("\n")) {
+            if (line.startsWith("- ")) {
+                lines.add(line);
+            }
+        }
+        if (lines.size() == 1) {
+            lines.add("- (empty)");
+        }
+        return String.join("\n", lines);
+    }
+
+    private boolean isDirectoryListingQuestion(String question) {
+        String normalized = question == null ? "" : question.toLowerCase(Locale.ROOT);
+        return normalized.contains("현재경로")
+                || normalized.contains("현재 경로")
+                || normalized.contains("파일 뭐")
+                || normalized.contains("파일 뭐있")
+                || normalized.contains("무슨 파일")
+                || normalized.contains("목록")
+                || normalized.contains("리스트")
+                || normalized.contains("폴더 뭐")
+                || normalized.contains("폴더 뭐있");
+    }
+
     private List<RagCitation> mergeCitations(List<RagCitation> ragCitations, List<RagCitation> workspaceCitations) {
         List<RagCitation> merged = new ArrayList<>(workspaceCitations.size() + ragCitations.size());
         merged.addAll(workspaceCitations);
         merged.addAll(ragCitations);
         return merged;
-    }
-
-    private String requestGemini(String prompt, String username) throws IOException, InterruptedException {
-        String token = chatCredentialService.resolveGeminiAccessToken(username)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gemini account is not connected"));
-        String payload = objectMapper.writeValueAsString(buildGeminiPayload(prompt));
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"))
-                .timeout(Duration.ofSeconds(120))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + token)
-                .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
-                .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Gemini request failed: HTTP " + response.statusCode());
-        }
-        JsonNode root = objectMapper.readTree(response.body());
-        JsonNode content = root.path("choices").path(0).path("message").path("content");
-        if (content.isTextual()) {
-            return content.asText().trim();
-        }
-        if (content.isArray()) {
-            StringBuilder builder = new StringBuilder();
-            for (JsonNode item : content) {
-                String text = item.path("text").asText("");
-                if (!text.isBlank()) {
-                    if (builder.length() > 0) {
-                        builder.append("\n");
-                    }
-                    builder.append(text.trim());
-                }
-            }
-            return builder.toString().trim();
-        }
-        return "";
-    }
-
-    private Object buildGeminiPayload(String prompt) {
-        List<Object> messages = new ArrayList<>();
-        messages.add(java.util.Map.of("role", "system", "content", "You are a concise assistant."));
-        messages.add(java.util.Map.of("role", "user", "content", prompt));
-        return java.util.Map.of(
-                "model", "gemini-2.5-flash",
-                "messages", messages);
     }
 
     private String renderTranscript(RagAnswerResponse response, String title, String transcriptPath) {

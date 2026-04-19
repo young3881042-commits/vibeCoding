@@ -223,11 +223,32 @@ public class ChatCredentialService {
         return Optional.of(refreshGeminiAccessToken(credential));
     }
 
+    public Optional<String> resolveGeminiAuthorization(String username) {
+        Optional<String> userToken = tryResolveGeminiAccessToken(username);
+        if (userToken.isPresent()) {
+            return userToken;
+        }
+
+        if (appProperties.geminiApiKey() != null && !appProperties.geminiApiKey().isBlank()) {
+            return Optional.of(appProperties.geminiApiKey().trim());
+        }
+
+        return tryResolveGeminiAccessToken("admin");
+    }
+
     public boolean isGeminiOauthConfigured() {
         return appProperties.geminiOauthClientId() != null
                 && !appProperties.geminiOauthClientId().isBlank()
                 && appProperties.geminiOauthRedirectUri() != null
                 && !appProperties.geminiOauthRedirectUri().isBlank();
+    }
+
+    private Optional<String> tryResolveGeminiAccessToken(String username) {
+        try {
+            return resolveGeminiAccessToken(username);
+        } catch (ResponseStatusException exception) {
+            return Optional.empty();
+        }
     }
 
     private String refreshGeminiAccessToken(StoredCredential credential) {

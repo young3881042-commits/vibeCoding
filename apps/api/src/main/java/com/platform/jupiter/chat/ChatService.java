@@ -190,8 +190,8 @@ public class ChatService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "OpenAI API key is not configured"));
         }
         if ("gemini".equals(providerId)) {
-            return chatCredentialService.resolveGeminiAccessToken(username)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gemini account is not connected"));
+            return chatCredentialService.resolveGeminiAuthorization(username)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gemini is not configured for this server"));
         }
         String normalizedBaseUrl = normalizeBaseUrl(request.baseUrl()).toLowerCase();
         String model = request.model() == null ? "" : request.model().trim().toLowerCase();
@@ -207,8 +207,8 @@ public class ChatService {
             return apiKey;
         }
         if (normalizedBaseUrl.contains("generativelanguage.googleapis.com") || model.startsWith("gemini")) {
-            return chatCredentialService.resolveGeminiAccessToken(username)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gemini account is not connected"));
+            return chatCredentialService.resolveGeminiAuthorization(username)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gemini is not configured for this server"));
         }
         return "";
     }
