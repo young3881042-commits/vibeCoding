@@ -61,6 +61,22 @@ kubectl apply -k infra/web/kubernetes
 웹 런타임 환경값은 `infra/web/kubernetes/web.env`를 ConfigMap으로 묶어서 넣습니다.  
 기본 이미지는 `jupiter-web:local`로 두었고, 실제 서버에서는 레지스트리 이미지로 바꿔 쓰면 됩니다.
 
+## Jenkins 자동배포
+
+루트의 `Jenkinsfile`은 `develop` 브랜치 기준으로 다음 순서로 동작합니다.
+
+1. 저장소 checkout
+2. `scripts/deploy_jupiter_from_source.sh` 실행
+3. `scripts/smoke_test_jupiter.sh` 실행
+
+배포 방식은 현재 클러스터 구조에 맞춰 이미지 빌드가 아니라 소스 아카이브를 Kubernetes Secret으로 갱신하는 방식입니다.
+
+- API: `jupiter-api-source`
+- Web: `jupiter-frontend-archive-source`
+
+Jenkins 잡은 Pipeline from SCM 또는 Multibranch Pipeline으로 연결하면 됩니다.
+Webhook을 연결하면 `develop` push 시 자동으로 배포됩니다.
+
 ## Kafka 수집 스크립트
 
 `scripts/admin1_kafka_collector.py`는 `admin1` 디렉터리를 재귀 순회하면서 파일별 JSON 스냅샷을 Kafka로 발행합니다.

@@ -50,6 +50,7 @@ app:
   rag-weather-enabled: ${APP_RAG_WEATHER_ENABLED:true}
   weather-api-base-url: ${APP_WEATHER_API_BASE_URL:https://api.open-meteo.com/v1/forecast}
   weather-locations: ${APP_WEATHER_LOCATIONS:Seoul:37.5665,126.9780;Busan:35.1796,129.0756;Incheon:37.4563,126.7052;Jeju:33.4996,126.5312;Gangneung:37.7519,128.8761}
+  gemini-api-key: ${APP_GEMINI_API_KEY:}
   open-ai-api-key: ${APP_OPENAI_API_KEY:${OPENAI_API_KEY:}}
   grok-api-key: ${APP_GROK_API_KEY:}
   gemini-oauth-client-id: ${APP_GEMINI_OAUTH_CLIENT_ID:}

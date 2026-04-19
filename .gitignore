@@ -1,6 +1,7 @@
 *
 !/.gitignore
 !/README.md
+!/Jenkinsfile
 !/apps/
 !/apps/**
 !/infra/

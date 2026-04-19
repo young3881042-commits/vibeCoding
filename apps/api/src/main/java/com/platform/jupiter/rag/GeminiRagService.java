@@ -31,8 +31,8 @@ public class GeminiRagService {
     }
 
     public String generate(String prompt, String username) throws IOException, InterruptedException {
-        String token = chatCredentialService.resolveGeminiAccessToken(username)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gemini account is not connected"));
+        String token = chatCredentialService.resolveGeminiAuthorization(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gemini is not configured for this server"));
         String payload = objectMapper.writeValueAsString(buildGeminiPayload(prompt));
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"))

@@ -36,6 +36,7 @@ public record AppProperties(
         Boolean ragWeatherEnabled,
         String weatherApiBaseUrl,
         String weatherLocations,
+        String geminiApiKey,
         String openAiApiKey,
         String grokApiKey,
         String geminiOauthClientId,
