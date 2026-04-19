@@ -21,12 +21,6 @@ async function api(path, { token, json = true, headers, ...init } = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-function labelForPath(path) {
-  if (!path) return 'Workspace';
-  const tokens = path.split('/').filter(Boolean);
-  return tokens[tokens.length - 1] || 'Workspace';
-}
-
 function RagMessage({ turn }) {
   if (turn.role === 'user') {
     return (
@@ -64,6 +58,10 @@ function RagMessage({ turn }) {
   );
 }
 
+function workspacePathFor(path) {
+  return path ? `/workspace/${path}` : '/workspace';
+}
+
 function RagComposer({ loading, question, setQuestion, onSubmit }) {
   return (
     <form
@@ -80,7 +78,7 @@ function RagComposer({ loading, question, setQuestion, onSubmit }) {
       <textarea
         value={question}
         rows="3"
-        placeholder="문서 기반으로 답을 찾고 싶은 질문을 입력하세요"
+        placeholder="문서나 실시간 날씨를 바탕으로 질문하세요"
         onChange={(event) => setQuestion(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
@@ -94,7 +92,7 @@ function RagComposer({ loading, question, setQuestion, onSubmit }) {
         }}
       />
       <div className="assistantComposerBar">
-        <span>업로드 문서와 현재 선택 경로를 함께 참조합니다.</span>
+        <span>검색 결과를 Gemini로 넘겨 답변을 생성합니다.</span>
         <button type="submit" className="ragSendButton" disabled={loading}>
           {loading ? 'Searching' : 'Ask RAG'}
         </button>
@@ -113,7 +111,6 @@ export default function RagApp({
   defaultQuestion = 'Indexed docs에서 API 지연 시 먼저 확인할 항목은 무엇인가?',
   embedded = false
 }) {
-  const [documents, setDocuments] = useState([]);
   const [turns, setTurns] = useState([]);
   const [question, setQuestion] = useState(defaultQuestion);
   const [loading, setLoading] = useState(false);
@@ -123,42 +120,37 @@ export default function RagApp({
   const scrollRef = useRef(null);
   const uploadRef = useRef(null);
   const saveEnabled = Boolean(authToken && persistToWorkspace);
+  const contextPath = workspacePathFor(directoryPath || (filePath ? filePath.split('/').slice(0, -1).join('/') : ''));
 
-  const contextLabel = filePath
-    ? `현재 파일 · ${filePath}`
-    : directoryPath
-      ? `현재 폴더 · ${directoryPath}`
-      : '워크스페이스 선택 없음';
-
-  const suggestions = useMemo(() => {
-    if (filePath) {
-      return [
-        `${labelForPath(filePath)}와 관련된 문서 기준으로 먼저 확인할 항목은?`,
-        `${labelForPath(filePath)} 변경 전에 참고할 배경 문서를 요약해줘`,
-        `${labelForPath(filePath)} 작업에 필요한 운영 문서를 찾아줘`
-      ];
-    }
-    if (directoryPath) {
-      return [
-        '현재 폴더와 관련된 업로드 문서에서 먼저 볼 내용을 요약해줘',
-        '현재 폴더 작업 전에 확인해야 할 운영 메모를 정리해줘',
-        '현재 폴더 기준으로 관련 문서들의 핵심 차이를 알려줘'
-      ];
-    }
-    return [
-      '현재 업로드된 문서에서 장애 대응 체크리스트를 찾아줘',
-      '색인 문서에서 운영 가이드를 요약해줘',
-      '문서 기준으로 아키텍처 핵심 포인트를 3개로 정리해줘'
-    ];
-  }, [directoryPath, filePath]);
+  const suggestions = useMemo(() => ([
+    '서울과 부산 중 지금 비 가능성이 더 높은 곳은 어디야?',
+    '제주와 강릉의 현재 체감온도 차이를 설명해줘',
+    '현재 업로드 문서 기준으로 운영 체크포인트를 요약해줘'
+  ]), []);
 
   const loadDocuments = async () => {
     try {
-      const data = await api('/api/rag/documents', { token: authToken });
-      setDocuments(data || []);
+      await api('/api/rag/weather', { token: authToken });
       setMessage('');
     } catch (error) {
       setMessage(error.message);
+    }
+  };
+
+  const refreshWeather = async () => {
+    setUploading(true);
+    setMessage('');
+    try {
+      await api('/api/rag/weather/refresh', {
+        method: 'POST',
+        token: authToken
+      });
+      await loadDocuments();
+      setMessage('실시간 날씨 데이터를 다시 수집하고 벡터 인덱스를 갱신했습니다.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -304,75 +296,29 @@ export default function RagApp({
         }}
         onDrop={handleDrop}
       >
-        <header className="assistantHeader">
-          <div>
-            <span className="assistantLabel">RAG Workspace</span>
-            <h1>선택한 폴더와 문서를 같이 읽는 RAG</h1>
-            <p className="assistantSubcopy">{contextLabel}</p>
-          </div>
+        <header className="assistantHeader assistantHeaderMinimal">
+          <code className="assistantPathPill">{contextPath}</code>
           <div className="assistantHeaderActions">
-            <span className="assistantBadge">{documents.length} docs</span>
-            <button type="button" className="ghostButton compact" onClick={loadDocuments} disabled={loading || uploading}>
-              Refresh
+            <button type="button" className="ghostButton compact" onClick={refreshWeather} disabled={loading || uploading}>
+              Sync
             </button>
             <button type="button" className="ghostButton compact" onClick={() => importWorkspaceSelection()} disabled={loading || uploading}>
-              현재 선택 올리기
+              Import
             </button>
             <button type="button" className="ragTopButton primary" onClick={() => uploadRef.current?.click()} disabled={loading || uploading}>
-              파일 올리기
+              Upload
+            </button>
+            <button type="button" className="ghostButton compact" onClick={() => setTurns([])} disabled={!turns.length || loading}>
+              Clear
             </button>
           </div>
         </header>
 
-        <section className="assistantHero">
-          <div className="assistantHeroCard">
-            <strong>문서 업로드</strong>
-            <p>`.md`, `.txt`, `.json` 같은 문서를 끌어다 놓으면 즉시 색인합니다.</p>
-          </div>
-          <div className="assistantHeroCard">
-            <strong>폴더 가져오기</strong>
-            <p>현재 선택한 폴더를 그대로 RAG 문서로 올려서 문맥 검색 범위를 늘릴 수 있습니다.</p>
-          </div>
-          <div className="assistantHeroCard">
-            <strong>드래그 연결</strong>
-            <p>가운데 파일 목록에서 파일이나 폴더를 이 패널로 끌어오면 바로 RAG 문서로 가져옵니다.</p>
-          </div>
-        </section>
-
-        <div className="assistantSuggestionRail">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              className="assistantSuggestion"
-              disabled={loading}
-              onClick={() => {
-                setQuestion(suggestion);
-                handleAsk(suggestion);
-              }}
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-
-        {documents.length ? (
-          <section className="assistantDocumentRail">
-            {documents.slice(0, 4).map((document) => (
-              <article className="assistantDocumentCard" key={document.id}>
-                <strong>{document.title}</strong>
-                <span>{document.filename}</span>
-                <p>{document.preview}</p>
-              </article>
-            ))}
-          </section>
-        ) : null}
-
         <div className="assistantStream" ref={scrollRef}>
           {!turns.length ? (
             <section className="assistantEmpty">
-              <h2>문서와 현재 선택 경로를 같이 참조합니다</h2>
-              <p>업로드 문서, 현재 폴더, 현재 파일을 함께 묶어 답을 정리합니다.</p>
+              <h2>Gemini 기반 RAG</h2>
+              <p>{suggestions[0]}</p>
             </section>
           ) : null}
           {turns.map((turn, index) => <RagMessage key={`${turn.role}-${index}`} turn={turn} />)}
@@ -380,7 +326,7 @@ export default function RagApp({
             <article className="assistantTurn assistant">
               <div className="assistantAvatar assistant">R</div>
               <div className="assistantBubble assistant loading">
-                <p>관련 문서와 현재 선택 경로를 함께 정리하고 있습니다.</p>
+                <p>RAG 검색 결과를 Gemini로 정리하고 있습니다.</p>
               </div>
             </article>
           ) : null}
