@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+KUBECTL_BIN="${KUBECTL_BIN:-kubectl}"
 
 NAMESPACE="${KUBE_NAMESPACE:-jupiter}"
 API_SECRET="${API_SECRET:-jupiter-api-source}"
@@ -24,25 +25,25 @@ tar -czf "$WEB_ARCHIVE" \
   -C "$ROOT_DIR/apps/web" .
 
 echo "[deploy] API source secret 갱신"
-kubectl -n "$NAMESPACE" create secret generic "$API_SECRET" \
+"$KUBECTL_BIN" -n "$NAMESPACE" create secret generic "$API_SECRET" \
   --from-file=source.tar.gz="$API_ARCHIVE" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | "$KUBECTL_BIN" apply -f -
 
 echo "[deploy] Web source secret 갱신"
-kubectl -n "$NAMESPACE" create secret generic "$WEB_SECRET" \
+"$KUBECTL_BIN" -n "$NAMESPACE" create secret generic "$WEB_SECRET" \
   --from-file=source.tar.gz="$WEB_ARCHIVE" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | "$KUBECTL_BIN" apply -f -
 
 echo "[deploy] API rollout restart"
-kubectl -n "$NAMESPACE" rollout restart "deploy/$API_DEPLOYMENT"
+"$KUBECTL_BIN" -n "$NAMESPACE" rollout restart "deploy/$API_DEPLOYMENT"
 
 echo "[deploy] Web rollout restart"
-kubectl -n "$NAMESPACE" rollout restart "deploy/$WEB_DEPLOYMENT"
+"$KUBECTL_BIN" -n "$NAMESPACE" rollout restart "deploy/$WEB_DEPLOYMENT"
 
 echo "[deploy] API rollout 대기"
-kubectl -n "$NAMESPACE" rollout status "deploy/$API_DEPLOYMENT" --timeout=240s
+"$KUBECTL_BIN" -n "$NAMESPACE" rollout status "deploy/$API_DEPLOYMENT" --timeout=240s
 
 echo "[deploy] Web rollout 대기"
-kubectl -n "$NAMESPACE" rollout status "deploy/$WEB_DEPLOYMENT" --timeout=240s
+"$KUBECTL_BIN" -n "$NAMESPACE" rollout status "deploy/$WEB_DEPLOYMENT" --timeout=240s
 
 echo "[deploy] 완료"

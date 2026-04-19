@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+KUBECTL_BIN="${KUBECTL_BIN:-kubectl}"
 NAMESPACE="${KUBE_NAMESPACE:-jupiter}"
 API_SERVICE="${API_SERVICE:-jupiter-api}"
 WEB_SERVICE="${WEB_SERVICE:-jupiter-web}"
@@ -37,15 +38,15 @@ wait_for_http() {
 }
 
 echo "[smoke] API port-forward"
-kubectl -n "$NAMESPACE" port-forward "svc/$API_SERVICE" "${API_PORT}:8080" >"$API_LOG" 2>&1 &
+"$KUBECTL_BIN" -n "$NAMESPACE" port-forward "svc/$API_SERVICE" "${API_PORT}:8080" >"$API_LOG" 2>&1 &
 API_PID=$!
 
 echo "[smoke] Web port-forward"
-kubectl -n "$NAMESPACE" port-forward "svc/$WEB_SERVICE" "${WEB_PORT}:80" >"$WEB_LOG" 2>&1 &
+"$KUBECTL_BIN" -n "$NAMESPACE" port-forward "svc/$WEB_SERVICE" "${WEB_PORT}:80" >"$WEB_LOG" 2>&1 &
 WEB_PID=$!
 
 echo "[smoke] Qdrant port-forward"
-kubectl -n "$NAMESPACE" port-forward "svc/$QDRANT_SERVICE" "${QDRANT_PORT}:6333" >"$QDRANT_LOG" 2>&1 &
+"$KUBECTL_BIN" -n "$NAMESPACE" port-forward "svc/$QDRANT_SERVICE" "${QDRANT_PORT}:6333" >"$QDRANT_LOG" 2>&1 &
 QDRANT_PID=$!
 
 sleep 5

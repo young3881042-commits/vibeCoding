@@ -16,12 +16,26 @@ pipeline {
         WEB_SECRET = 'jupiter-frontend-archive-source'
         API_DEPLOYMENT = 'jupiter-api'
         WEB_DEPLOYMENT = 'jupiter-web'
+        KUBECTL_BIN = './bin/kubectl'
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Prepare Tools') {
+            steps {
+                sh '''
+                    mkdir -p bin
+                    if [ ! -x "$KUBECTL_BIN" ]; then
+                      curl -fsSLo "$KUBECTL_BIN" https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
+                      chmod +x "$KUBECTL_BIN"
+                    fi
+                    "$KUBECTL_BIN" version --client
+                '''
             }
         }
 
