@@ -23,6 +23,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -30,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class RagService {
+    private static final Logger log = LoggerFactory.getLogger(RagService.class);
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[\\p{L}\\p{N}]{2,}");
     private static final Set<String> TEXT_EXTENSIONS = Set.of("txt", "md", "csv", "json", "log", "yaml", "yml");
     private static final int CHUNK_SIZE = 520;
@@ -39,11 +42,24 @@ public class RagService {
     private final Path sourceRoot;
     private final Path documentsRoot;
     private final Map<String, IndexedDocument> documents = new ConcurrentHashMap<>();
+    private final RagEmbeddingService ragEmbeddingService;
+    private final VectorStoreService vectorStoreService;
+    private final WeatherRagService weatherRagService;
+    private final GeminiRagService geminiRagService;
 
-    public RagService(AppProperties appProperties) {
+    public RagService(
+            AppProperties appProperties,
+            RagEmbeddingService ragEmbeddingService,
+            VectorStoreService vectorStoreService,
+            WeatherRagService weatherRagService,
+            GeminiRagService geminiRagService) {
         this.ragRoot = Path.of(appProperties.ragRoot());
         this.sourceRoot = Path.of(appProperties.ragSourceRoot());
         this.documentsRoot = ragRoot.resolve("documents");
+        this.ragEmbeddingService = ragEmbeddingService;
+        this.vectorStoreService = vectorStoreService;
+        this.weatherRagService = weatherRagService;
+        this.geminiRagService = geminiRagService;
     }
 
     @PostConstruct
@@ -52,6 +68,7 @@ public class RagService {
             Files.createDirectories(sourceRoot);
             Files.createDirectories(documentsRoot);
             seedIfEmpty();
+            refreshWeatherSource();
             reloadIndex();
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to initialize RAG storage", exception);
@@ -63,6 +80,20 @@ public class RagService {
                 .sorted(Comparator.comparing(IndexedDocument::uploadedAt).reversed())
                 .map(IndexedDocument::summary)
                 .toList();
+    }
+
+    public WeatherRagStatusResponse weatherStatus() {
+        return weatherRagService.status();
+    }
+
+    public WeatherRagStatusResponse refreshWeatherData() {
+        WeatherRagStatusResponse status = weatherRagService.refresh(sourceRoot);
+        try {
+            reloadIndex();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to reload RAG index after weather refresh", exception);
+        }
+        return status;
     }
 
     public RagDocumentSummary upload(MultipartFile file) {
@@ -84,6 +115,10 @@ public class RagService {
     }
 
     public RagAnswerResponse answer(RagQueryRequest request) {
+        return answer(request, null);
+    }
+
+    public RagAnswerResponse answer(RagQueryRequest request, String username) {
         List<String> queryTokens = tokenize(request.question());
         if (queryTokens.isEmpty()) {
             return new RagAnswerResponse(
@@ -94,10 +129,20 @@ public class RagService {
         }
 
         RagRetrievalResult retrieval = retrieve(request);
+        if (username != null && !username.isBlank()) {
+            try {
+                String answer = geminiRagService.generate(buildPrompt(request.question(), retrieval.candidates()), username);
+                if (!answer.isBlank()) {
+                    return new RagAnswerResponse(request.question(), answer, retrieval.citations(), Instant.now());
+                }
+            } catch (Exception exception) {
+                log.warn("Gemini RAG answer failed for {}: {}", username, exception.getMessage());
+            }
+        }
         if (retrieval.candidates().isEmpty()) {
             return new RagAnswerResponse(
                     request.question(),
-                    "현재 저장된 문서에서 질문과 가까운 내용을 찾지 못했습니다. 다른 키워드로 다시 질문하거나 문서를 더 올려 주세요.",
+                    "현재 저장된 문서와 실시간 날씨 인덱스에서 질문과 가까운 내용을 찾지 못했습니다. 도시명이나 온도, 강수, 바람 같은 키워드를 넣어 다시 질문해 주세요.",
                     List.of(),
                     Instant.now());
         }
@@ -110,18 +155,59 @@ public class RagService {
         int topK = request.topK() == null ? 4 : request.topK();
         List<String> queryTokens = tokenize(request.question());
 
-        List<ScoredChunk> topChunks = documents.values().stream()
-                .flatMap(document -> document.chunks().stream().map(chunk -> scoreChunk(document, chunk, queryTokens, request.question())))
-                .filter(scored -> scored.score() > 0)
-                .sorted(Comparator.comparingDouble(ScoredChunk::score).reversed())
-                .limit(topK)
-                .toList();
-
-        if (topChunks.isEmpty()) {
-            return new RagRetrievalResult(request.question(), List.of());
+        LinkedHashMap<String, RagContextChunk> merged = new LinkedHashMap<>();
+        for (RagContextChunk chunk : vectorMatches(request.question(), topK * 2, queryTokens)) {
+            merged.put(chunk.documentId() + "#" + chunk.chunkIndex(), chunk);
+        }
+        for (RagContextChunk chunk : lexicalMatches(request.question(), topK * 2, queryTokens)) {
+            merged.merge(chunk.documentId() + "#" + chunk.chunkIndex(), chunk, this::preferHigherScore);
         }
 
-        List<RagContextChunk> candidates = topChunks.stream()
+        List<RagContextChunk> candidates = merged.values().stream()
+                .sorted(Comparator.comparingDouble(RagContextChunk::score).reversed())
+                .limit(topK)
+                .toList();
+        return new RagRetrievalResult(request.question(), candidates);
+    }
+
+    private RagContextChunk preferHigherScore(RagContextChunk left, RagContextChunk right) {
+        return left.score() >= right.score() ? left : right;
+    }
+
+    private List<RagContextChunk> vectorMatches(String question, int limit, List<String> queryTokens) {
+        float[] vector = ragEmbeddingService.embed(question);
+        return vectorStoreService.search(vector, limit).stream()
+                .map(result -> new RagContextChunk(
+                        result.documentId(),
+                        result.documentTitle(),
+                        result.chunkIndex(),
+                        round(boostVectorScore(result.score(), result.text(), queryTokens, question)),
+                        result.text()))
+                .filter(chunk -> chunk.score() > 0)
+                .toList();
+    }
+
+    private double boostVectorScore(double score, String text, List<String> queryTokens, String question) {
+        double boosted = score * 10;
+        String loweredChunk = text.toLowerCase(Locale.ROOT);
+        String loweredQuestion = question.toLowerCase(Locale.ROOT);
+        if (loweredChunk.contains(loweredQuestion)) {
+            boosted += 3;
+        }
+        for (String token : queryTokens) {
+            if (loweredChunk.contains(token)) {
+                boosted += token.length() >= 4 ? 0.5 : 0.2;
+            }
+        }
+        return boosted;
+    }
+
+    private List<RagContextChunk> lexicalMatches(String question, int limit, List<String> queryTokens) {
+        return documents.values().stream()
+                .flatMap(document -> document.chunks().stream().map(chunk -> scoreChunk(document, chunk, queryTokens, question)))
+                .filter(scored -> scored.score() > 0)
+                .sorted(Comparator.comparingDouble(ScoredChunk::score).reversed())
+                .limit(limit)
                 .map(scored -> new RagContextChunk(
                         scored.document().id(),
                         scored.document().title(),
@@ -129,11 +215,11 @@ public class RagService {
                         round(scored.score()),
                         scored.chunk().text()))
                 .toList();
-        return new RagRetrievalResult(request.question(), candidates);
     }
 
     private void reloadIndex() throws IOException {
         documents.clear();
+        vectorStoreService.resetCollection();
         indexRoot(sourceRoot, "source");
         indexRoot(documentsRoot, "upload");
     }
@@ -142,7 +228,7 @@ public class RagService {
         if (!Files.exists(root)) {
             return;
         }
-        try (Stream<Path> stream = Files.list(root)) {
+        try (Stream<Path> stream = Files.walk(root)) {
             stream.filter(Files::isRegularFile)
                     .map(file -> indexFile(root, file, category))
                     .forEach(document -> documents.put(document.id(), document));
@@ -168,16 +254,44 @@ public class RagService {
                 }
             }
 
-            String id = category + "/" + root.relativize(file).toString().replace('\\', '/');
+            String relativePath = root.relativize(file).toString().replace('\\', '/');
+            String id = category + "/" + relativePath;
             String title = prettifyTitle(filename);
             String contentType = mediaTypeOf(filename);
             long size = Files.size(file);
             Instant uploadedAt = Files.getLastModifiedTime(file).toInstant();
             String preview = chunks.isEmpty() ? "" : abbreviate(chunks.get(0).text(), 180);
-
-            return new IndexedDocument(id, title, filename, contentType, size, uploadedAt, chunks, documentFrequency, preview);
+            IndexedDocument document = new IndexedDocument(id, title, filename, contentType, size, uploadedAt, chunks, documentFrequency, preview, category);
+            upsertDocumentChunks(document);
+            return document;
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to index " + file, exception);
+        }
+    }
+
+    private void upsertDocumentChunks(IndexedDocument document) {
+        List<VectorStoreService.VectorPoint> points = new ArrayList<>();
+        for (Chunk chunk : document.chunks()) {
+            points.add(new VectorStoreService.VectorPoint(
+                    vectorStoreService.pointId(document.id(), chunk.index()),
+                    document.id(),
+                    document.title(),
+                    chunk.index(),
+                    chunk.text(),
+                    document.category(),
+                    ragEmbeddingService.embed(chunk.text())));
+        }
+        vectorStoreService.upsertChunks(points);
+    }
+
+    private void refreshWeatherSource() {
+        if (!weatherRagService.enabled()) {
+            return;
+        }
+        try {
+            weatherRagService.refresh(sourceRoot);
+        } catch (Exception exception) {
+            log.warn("Skipping live weather bootstrap: {}", exception.getMessage());
         }
     }
 
@@ -256,13 +370,43 @@ public class RagService {
 
     private String synthesizeAnswer(String question, List<RagContextChunk> chunks) {
         List<String> lines = new ArrayList<>();
-        lines.add("질문과 가장 가까운 문서 내용을 기준으로 정리했습니다.");
+        boolean weatherFocused = chunks.stream().anyMatch(chunk -> chunk.documentId().contains("weather-live"));
+        if (weatherFocused) {
+            lines.add("실시간 날씨 RAG와 업로드 문서를 함께 기준으로 정리했습니다.");
+        } else {
+            lines.add("질문과 가장 가까운 문서 내용을 기준으로 정리했습니다.");
+        }
         for (int index = 0; index < chunks.size(); index++) {
             RagContextChunk chunk = chunks.get(index);
             lines.add((index + 1) + ". " + chunk.documentTitle() + ": " + abbreviate(chunk.text(), 220));
         }
         lines.add("출처는 아래 문서 조각 목록에서 바로 확인할 수 있습니다.");
         return String.join("\n", lines);
+    }
+
+    private String buildPrompt(String question, List<RagContextChunk> chunks) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("You are a concise Korean RAG assistant.\n");
+        builder.append("Answer only from the provided retrieved context when possible.\n");
+        builder.append("If the retrieved context is insufficient, clearly say what is missing and keep the answer cautious.\n");
+        builder.append("When weather context is present, prefer the latest weather facts from context.\n");
+        builder.append("Return a concise answer in Korean.\n\n");
+        builder.append("Question:\n").append(question.trim()).append("\n\n");
+        builder.append("Retrieved context:\n");
+        if (chunks.isEmpty()) {
+            builder.append("(no relevant indexed documents were found)\n");
+        } else {
+            for (int index = 0; index < chunks.size(); index++) {
+                RagContextChunk chunk = chunks.get(index);
+                builder.append("[R").append(index + 1).append("] ")
+                        .append(chunk.documentTitle())
+                        .append(" (chunk ").append(chunk.chunkIndex()).append(", score ")
+                        .append(chunk.score()).append(")\n")
+                        .append(chunk.text().trim())
+                        .append("\n\n");
+            }
+        }
+        return builder.toString().trim();
     }
 
     private List<TextChunk> chunk(String text) {
@@ -389,7 +533,8 @@ public class RagService {
             Instant uploadedAt,
             List<Chunk> chunks,
             Map<String, Integer> documentFrequency,
-            String preview) {
+            String preview,
+            String category) {
         RagDocumentSummary summary() {
             return new RagDocumentSummary(id, title, filename, contentType, size, uploadedAt, chunks.size(), preview);
         }

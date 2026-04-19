@@ -43,6 +43,7 @@ import com.platform.jupiter.rag.RagWorkspaceImportRequest;
 import com.platform.jupiter.rag.RagWorkspaceRequest;
 import com.platform.jupiter.rag.RagWorkspaceResponse;
 import com.platform.jupiter.rag.RagWorkspaceService;
+import com.platform.jupiter.rag.WeatherRagStatusResponse;
 import com.platform.jupiter.travel.TravelAnalyticsService;
 import com.platform.jupiter.travel.TravelDashboardResponse;
 import jakarta.validation.Valid;
@@ -430,8 +431,19 @@ public class JupiterController {
     }
 
     @PostMapping("/rag/query")
-    public RagAnswerResponse ragQuery(@Valid @RequestBody RagQueryRequest request) {
-        return ragService.answer(request);
+    public RagAnswerResponse ragQuery(@Valid @RequestBody RagQueryRequest request, HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        return ragService.answer(request, session.username());
+    }
+
+    @GetMapping("/rag/weather")
+    public WeatherRagStatusResponse ragWeatherStatus() {
+        return ragService.weatherStatus();
+    }
+
+    @PostMapping("/rag/weather/refresh")
+    public WeatherRagStatusResponse ragWeatherRefresh() {
+        return ragService.refreshWeatherData();
     }
 
     @PostMapping("/rag/query-and-save")
