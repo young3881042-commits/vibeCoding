@@ -2,13 +2,12 @@ pipeline {
     agent any
 
     options {
-        timestamps()
         disableConcurrentBuilds()
         buildDiscarder(logRotator(numToKeepStr: '20'))
     }
 
     triggers {
-        githubPush()
+        pollSCM('H/2 * * * *')
     }
 
     environment {
