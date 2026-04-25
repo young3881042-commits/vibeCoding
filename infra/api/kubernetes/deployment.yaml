@@ -13,6 +13,10 @@ spec:
       labels:
         app: jupiter-api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: api
           image: jupiter-api:local
@@ -23,3 +27,15 @@ spec:
           envFrom:
             - configMapRef:
                 name: jupiter-api-env
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
