@@ -78,7 +78,7 @@ function RagComposer({ loading, question, setQuestion, onSubmit }) {
       <textarea
         value={question}
         rows="3"
-        placeholder="문서나 실시간 날씨를 바탕으로 질문하세요"
+        placeholder="문서/다분야 수집 데이터/실시간 날씨를 바탕으로 질문하세요"
         onChange={(event) => setQuestion(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
@@ -92,7 +92,7 @@ function RagComposer({ loading, question, setQuestion, onSubmit }) {
         }}
       />
       <div className="assistantComposerBar">
-        <span>검색 결과를 Gemini로 넘겨 답변을 생성합니다.</span>
+        <span>검색 결과를 Gemini 우선, 실패 시 OpenAI로 넘겨 답변을 생성합니다.</span>
         <button type="submit" className="ragSendButton" disabled={loading}>
           {loading ? 'Searching' : 'Ask RAG'}
         </button>
@@ -134,6 +134,24 @@ export default function RagApp({
       setMessage('');
     } catch (error) {
       setMessage(error.message);
+    }
+  };
+
+
+  const refreshDomains = async () => {
+    setUploading(true);
+    setMessage('');
+    try {
+      const status = await api('/api/rag/domains/refresh', {
+        method: 'POST',
+        token: authToken
+      });
+      await loadDocuments();
+      setMessage(`${status.documentCount}개 다분야 문서를 수집하고 인덱스를 갱신했습니다.`);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -300,7 +318,10 @@ export default function RagApp({
           <code className="assistantPathPill">{contextPath}</code>
           <div className="assistantHeaderActions">
             <button type="button" className="ghostButton compact" onClick={refreshWeather} disabled={loading || uploading}>
-              Sync
+              Weather
+            </button>
+            <button type="button" className="ghostButton compact" onClick={refreshDomains} disabled={loading || uploading}>
+              Domains
             </button>
             <button type="button" className="ghostButton compact" onClick={() => importWorkspaceSelection()} disabled={loading || uploading}>
               Import
@@ -317,7 +338,7 @@ export default function RagApp({
         <div className="assistantStream" ref={scrollRef}>
           {!turns.length ? (
             <section className="assistantEmpty">
-              <h2>Gemini 기반 RAG</h2>
+              <h2>멀티도메인 + Gemini/OpenAI RAG</h2>
               <p>{suggestions[0]}</p>
             </section>
           ) : null}
@@ -326,7 +347,7 @@ export default function RagApp({
             <article className="assistantTurn assistant">
               <div className="assistantAvatar assistant">R</div>
               <div className="assistantBubble assistant loading">
-                <p>RAG 검색 결과를 Gemini로 정리하고 있습니다.</p>
+                <p>RAG 검색 결과를 LLM으로 정리하고 있습니다.</p>
               </div>
             </article>
           ) : null}

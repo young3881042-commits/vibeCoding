@@ -40,6 +40,7 @@ import com.platform.jupiter.rag.RagDocumentSummary;
 import com.platform.jupiter.rag.RagQueryRequest;
 import com.platform.jupiter.rag.RagService;
 import com.platform.jupiter.rag.RagWorkspaceImportRequest;
+import com.platform.jupiter.rag.DomainRagStatusResponse;
 import com.platform.jupiter.rag.RagWorkspaceRequest;
 import com.platform.jupiter.rag.RagWorkspaceResponse;
 import com.platform.jupiter.rag.RagWorkspaceService;
@@ -439,6 +440,16 @@ public class JupiterController {
     @GetMapping("/rag/weather")
     public WeatherRagStatusResponse ragWeatherStatus() {
         return ragService.weatherStatus();
+    }
+
+    @GetMapping("/rag/domains")
+    public DomainRagStatusResponse ragDomainStatus() {
+        return ragService.domainStatus();
+    }
+
+    @PostMapping("/rag/domains/refresh")
+    public DomainRagStatusResponse ragDomainRefresh() {
+        return ragService.refreshDomainData();
     }
 
     @PostMapping("/rag/weather/refresh")
