@@ -15,12 +15,6 @@ async function api(path, { token, headers, ...init } = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-function labelForPath(path) {
-  if (!path) return 'Workspace';
-  const tokens = path.split('/').filter(Boolean);
-  return tokens[tokens.length - 1] || 'Workspace';
-}
-
 function workspacePathFor(path) {
   return path ? `/workspace/${path}` : '/workspace';
 }
@@ -39,6 +33,8 @@ function GeminiTurn({ turn }) {
           <div className="assistantMetaLine">
             <span>{turn.timedOut ? 'timeout' : turn.exitCode === 0 ? 'completed' : `exit ${turn.exitCode}`}</span>
             <span>{turn.workingDirectory ? `/${turn.workingDirectory}` : '/workspace'}</span>
+            {turn.providerId ? <span>{turn.providerId}</span> : null}
+            {turn.model ? <span>{turn.model}</span> : null}
           </div>
         ) : null}
       </div>
@@ -62,7 +58,7 @@ function GeminiComposer({ loading, prompt, setPrompt, onSubmit }) {
       <textarea
         value={prompt}
         rows="3"
-        placeholder="Gemini에 작업을 요청하세요. 예: 현재 폴더 기준으로 README를 정리해줘"
+        placeholder="LLM에 작업을 요청하세요. 예: 현재 폴더 기준으로 README를 정리해줘"
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
@@ -76,9 +72,9 @@ function GeminiComposer({ loading, prompt, setPrompt, onSubmit }) {
         }}
       />
       <div className="assistantComposerBar">
-        <span>현재 선택 경로에서 `gprompt` one-shot 실행 결과를 바로 보여줍니다.</span>
+        <span>API key는 브라우저에 저장하지 않고 서버 환경변수를 사용합니다.</span>
         <button type="submit" className="ragSendButton" disabled={loading}>
-          {loading ? 'Running' : 'Send to Gemini'}
+          {loading ? 'Running' : 'Send'}
         </button>
       </div>
     </form>
@@ -95,6 +91,9 @@ export default function GeminiApp({
   const [turns, setTurns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [providerId, setProviderId] = useState('openai');
+  const [model, setModel] = useState('');
+  const [llmConfig, setLlmConfig] = useState(null);
   const scrollRef = useRef(null);
 
   const contextPath = workspacePathFor(directoryPath || (filePath ? filePath.split('/').slice(0, -1).join('/') : ''));
@@ -107,6 +106,18 @@ export default function GeminiApp({
     container.scrollTop = container.scrollHeight;
   }, [turns, loading, message]);
 
+  useEffect(() => {
+    if (!authToken) {
+      return;
+    }
+    api('/api/workspace/llm/config', { token: authToken })
+      .then((config) => {
+        setLlmConfig(config);
+        setModel(config?.defaultOpenAiModel || 'gpt-5.2-codex');
+      })
+      .catch((error) => setMessage(error.message));
+  }, [authToken]);
+
   const handleSubmit = async (value) => {
     setLoading(true);
     setMessage('');
@@ -117,7 +128,7 @@ export default function GeminiApp({
         method: 'POST',
         token: authToken,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: value, directoryPath, filePath })
+        body: JSON.stringify({ prompt: value, directoryPath, filePath, providerId, model })
       });
       setTurns((current) => [...current, { role: 'assistant', ...response }]);
     } catch (error) {
@@ -133,11 +144,22 @@ export default function GeminiApp({
         <header className="assistantHeader assistantHeaderMinimal">
           <code className="assistantPathPill">{contextPath}</code>
           <div className="assistantHeaderActions">
+            <select value={providerId} onChange={(event) => setProviderId(event.target.value)}>
+              <option value="openai">OpenAI API Mode</option>
+              <option value="codex-cli" disabled={!llmConfig?.codexCliModeEnabled}>Codex CLI Session Mode</option>
+            </select>
+            {providerId === 'openai' ? (
+              <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="gpt-5.2-codex" />
+            ) : null}
             <button type="button" className="ghostButton compact" onClick={() => setTurns([])} disabled={!turns.length || loading}>
               Clear
             </button>
           </div>
         </header>
+        <div className="assistantMetaLine" style={{ margin: '0.4rem 0 0.8rem 0' }}>
+          <span>{llmConfig?.openAiMessage || 'LLM 설정 조회 중...'}</span>
+          <span>{llmConfig?.codexMessage || ''}</span>
+        </div>
 
         <div className="assistantStream" ref={scrollRef}>
           {turns.map((turn, index) => (
@@ -147,7 +169,7 @@ export default function GeminiApp({
             <article className="assistantTurn assistant">
               <div className="assistantAvatar assistant">G</div>
               <div className="assistantBubble assistant loading">
-                <p>Gemini가 현재 워크스페이스에서 작업 중입니다.</p>
+                <p>요청을 처리하고 있습니다.</p>
               </div>
             </article>
           ) : null}

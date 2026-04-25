@@ -19,12 +19,15 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ChatService {
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
             .withZone(ZoneId.of("Asia/Seoul"));
 
@@ -70,9 +73,13 @@ public class ChatService {
 
             HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                if (response.statusCode() == 429) {
+                    log.warn("Model API 429 status from provider={}, body={}", request.providerId(), summarize(maskSensitive(response.body())));
+                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI API 사용량 한도 또는 모델 접근 권한 문제로 요청에 실패했습니다. 서버 관리자에게 문의하세요.");
+                }
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        "Model API request failed: HTTP " + response.statusCode() + " " + summarize(response.body()));
+                        "Model API request failed: HTTP " + response.statusCode() + " " + summarize(maskSensitive(response.body())));
             }
             JsonNode root = objectMapper.readTree(response.body());
             String content = extractAssistantMessage(root);
@@ -100,7 +107,7 @@ public class ChatService {
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", request.model().trim());
+        payload.put("model", resolveModel(request.model()));
         payload.put("messages", messages);
         return payload;
     }
@@ -211,6 +218,27 @@ public class ChatService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gemini is not configured for this server"));
         }
         return "";
+    }
+
+    private String resolveModel(String requestedModel) {
+        if (requestedModel != null && !requestedModel.isBlank()) {
+            return requestedModel.trim();
+        }
+        if (appProperties.openAiModel() != null && !appProperties.openAiModel().isBlank()) {
+            return appProperties.openAiModel().trim();
+        }
+        return "gpt-5.2-codex";
+    }
+
+    private String maskSensitive(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value
+                .replaceAll("(?i)authorization\\s*:\\s*bearer\\s+[A-Za-z0-9._\\-]+", "authorization: bearer [REDACTED]")
+                .replaceAll("(?i)bearer\\s+[A-Za-z0-9._\\-]+", "bearer [REDACTED]")
+                .replaceAll("(?i)sk-[A-Za-z0-9_-]+", "sk-[REDACTED]")
+                .replaceAll("(?i)sk-proj-[A-Za-z0-9_-]+", "sk-proj-[REDACTED]");
     }
 
     private String summarize(String value) {

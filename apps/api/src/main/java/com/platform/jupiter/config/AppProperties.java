@@ -38,7 +38,9 @@ public record AppProperties(
         String weatherLocations,
         String geminiApiKey,
         String openAiApiKey,
+        String openAiModel,
         String grokApiKey,
+        Boolean enableCodexCliMode,
         String geminiOauthClientId,
         String geminiOauthClientSecret,
         String geminiOauthRedirectUri) {
