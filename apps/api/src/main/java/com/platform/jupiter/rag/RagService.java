@@ -45,6 +45,7 @@ public class RagService {
     private final RagEmbeddingService ragEmbeddingService;
     private final VectorStoreService vectorStoreService;
     private final WeatherRagService weatherRagService;
+    private final DomainRagCollectorService domainRagCollectorService;
     private final GeminiRagService geminiRagService;
 
     public RagService(
@@ -52,6 +53,7 @@ public class RagService {
             RagEmbeddingService ragEmbeddingService,
             VectorStoreService vectorStoreService,
             WeatherRagService weatherRagService,
+            DomainRagCollectorService domainRagCollectorService,
             GeminiRagService geminiRagService) {
         this.ragRoot = Path.of(appProperties.ragRoot());
         this.sourceRoot = Path.of(appProperties.ragSourceRoot());
@@ -59,6 +61,7 @@ public class RagService {
         this.ragEmbeddingService = ragEmbeddingService;
         this.vectorStoreService = vectorStoreService;
         this.weatherRagService = weatherRagService;
+        this.domainRagCollectorService = domainRagCollectorService;
         this.geminiRagService = geminiRagService;
     }
 
@@ -69,6 +72,7 @@ public class RagService {
             Files.createDirectories(documentsRoot);
             seedIfEmpty();
             refreshWeatherSource();
+            refreshDomainSources();
             reloadIndex();
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to initialize RAG storage", exception);
@@ -84,6 +88,21 @@ public class RagService {
 
     public WeatherRagStatusResponse weatherStatus() {
         return weatherRagService.status();
+    }
+
+
+    public DomainRagStatusResponse domainStatus() {
+        return domainRagCollectorService.status(sourceRoot);
+    }
+
+    public DomainRagStatusResponse refreshDomainData() {
+        DomainRagStatusResponse status = domainRagCollectorService.collect(sourceRoot);
+        try {
+            reloadIndex();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to reload RAG index after domain refresh", exception);
+        }
+        return status;
     }
 
     public WeatherRagStatusResponse refreshWeatherData() {
@@ -292,6 +311,14 @@ public class RagService {
             weatherRagService.refresh(sourceRoot);
         } catch (Exception exception) {
             log.warn("Skipping live weather bootstrap: {}", exception.getMessage());
+        }
+    }
+
+    private void refreshDomainSources() {
+        try {
+            domainRagCollectorService.collect(sourceRoot);
+        } catch (Exception exception) {
+            log.warn("Skipping multi-domain bootstrap: {}", exception.getMessage());
         }
     }
 
