@@ -27,6 +27,7 @@ import com.platform.jupiter.files.SnapshotDto;
 import com.platform.jupiter.files.VirusScanService;
 import com.platform.jupiter.files.WorkspaceGeminiRequest;
 import com.platform.jupiter.files.WorkspaceGeminiResponse;
+import com.platform.jupiter.files.WorkspaceExecutionLogDto;
 import com.platform.jupiter.files.WorkspaceExecutionService;
 import com.platform.jupiter.files.WorkspaceFileRequest;
 import com.platform.jupiter.files.WorkspaceRenameRequest;
@@ -261,6 +262,14 @@ public class JupiterController {
     public WorkspaceGeminiResponse workspaceGemini(@Valid @RequestBody WorkspaceGeminiRequest request, HttpServletRequest servletRequest) {
         AuthSession session = authService.requireSession(servletRequest);
         return workspaceExecutionService.runGeminiPrompt(request, session.username(), session.admin());
+    }
+
+    @GetMapping("/workspace/executions")
+    public List<WorkspaceExecutionLogDto> workspaceExecutions(
+            @RequestParam(defaultValue = "20") int limit,
+            HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        return workspaceExecutionService.listExecutionLogs(session.username(), limit);
     }
 
     @PostMapping("/chat/query")
