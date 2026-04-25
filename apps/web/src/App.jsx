@@ -93,6 +93,27 @@ function monitorUrls() {
   };
 }
 
+function formatCpu(milli) {
+  if (!milli) return '0m';
+  if (milli >= 1000) return `${(milli / 1000).toFixed(1)} cores`;
+  return `${milli}m`;
+}
+
+function formatMemory(mib) {
+  if (!mib) return '0 MiB';
+  if (mib >= 1024) return `${(mib / 1024).toFixed(1)} GiB`;
+  return `${mib} MiB`;
+}
+
+function formatPercent(value) {
+  return `${Number(value || 0).toFixed(1)}%`;
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString();
+}
+
 function validateAuthForm(mode, username, password) {
   const trimmedUsername = username.trim();
   if (!trimmedUsername) {
@@ -690,25 +711,214 @@ function EditorPanel({ selectedFile, content, setContent, loading, error, output
   );
 }
 
-function AdminMonitorPanel({ activeMonitor, setActiveMonitor }) {
+function StatTile({ label, value, detail, tone = 'default' }) {
+  return (
+    <article className={`monitorStatTile ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail ? <small>{detail}</small> : null}
+    </article>
+  );
+}
+
+function UsageBar({ value }) {
+  const width = Math.max(0, Math.min(100, Number(value || 0)));
+  return (
+    <div className="usageBar" aria-label={`${width.toFixed(1)}%`}>
+      <span style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
+function AdminMonitorPanel({ authToken, activeMonitor, setActiveMonitor }) {
   const monitors = monitorUrls();
   const currentUrl = activeMonitor === 'prometheus' ? monitors.prometheus : monitors.grafana;
+  const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [monitorError, setMonitorError] = useState('');
+  const [containerSort, setContainerSort] = useState('cpu');
+
+  const loadDashboard = async (silent = false) => {
+    if (!authToken) return;
+    if (!silent) setLoading(true);
+    setMonitorError('');
+    try {
+      const data = await requestJson('/api/monitoring/cluster', { headers: authHeaders(authToken) });
+      setDashboard(data);
+    } catch (loadError) {
+      setMonitorError(loadError.message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboard().catch(() => {});
+    const timer = window.setInterval(() => {
+      loadDashboard(true).catch(() => {});
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [authToken]);
+
+  const summary = dashboard?.summary;
+  const nodes = dashboard?.nodes || [];
+  const namespaces = dashboard?.namespaces || [];
+  const containers = [...(dashboard?.containers || [])].sort((left, right) => {
+    if (containerSort === 'memory') {
+      return right.memoryUsageMi - left.memoryUsageMi || right.cpuUsageMilli - left.cpuUsageMilli;
+    }
+    if (containerSort === 'restart') {
+      return right.restartCount - left.restartCount || right.cpuUsageMilli - left.cpuUsageMilli;
+    }
+    return right.cpuUsageMilli - left.cpuUsageMilli || right.memoryUsageMi - left.memoryUsageMi;
+  });
 
   return (
-    <section className="browserPreviewPanel">
+    <section className="browserPreviewPanel monitorDashboardPanel">
       <div className="editorHeader">
         <div>
-          <span className="panelEyebrow">Monitor</span>
-          <h2>Cluster Usage</h2>
-          <p className="panelSubcopy">{currentUrl}</p>
+          <span className="panelEyebrow">Live Cluster Monitor</span>
+          <h2>Kubernetes Resource Center</h2>
+          <p className="panelSubcopy">
+            {dashboard ? `Last sampled ${formatDateTime(dashboard.generatedAt)}` : 'metrics-server와 Prometheus 기반 상태를 통합해서 봅니다.'}
+          </p>
         </div>
         <div className="chatHeaderActions">
+          <button type="button" className="ghostButton compact" onClick={() => loadDashboard()} disabled={loading}>
+            {loading ? '갱신 중' : 'Refresh'}
+          </button>
           <button type="button" className={`ghostButton compact ${activeMonitor === 'grafana' ? 'active' : ''}`} onClick={() => setActiveMonitor('grafana')}>Grafana</button>
           <button type="button" className={`ghostButton compact ${activeMonitor === 'prometheus' ? 'active' : ''}`} onClick={() => setActiveMonitor('prometheus')}>Prometheus</button>
           <button type="button" className="sendButton" onClick={() => window.open(currentUrl, '_blank', 'noopener,noreferrer')}>Open</button>
         </div>
       </div>
-      <iframe title={`${activeMonitor} monitor`} className="monitorFrame" src={currentUrl} />
+      {monitorError ? <p className="previewError">{monitorError}</p> : null}
+      {!dashboard && !monitorError ? <p className="previewState">클러스터 메트릭을 불러오는 중입니다.</p> : null}
+      {dashboard ? (
+        <div className="monitorDashboard">
+          <div className="monitorHero">
+            <StatTile
+              label="CPU"
+              value={formatCpu(summary?.cpuUsageMilli)}
+              detail={`${formatPercent(summary?.cpuUsagePercent)} of ${formatCpu(summary?.cpuCapacityMilli)}`}
+              tone="cpu"
+            />
+            <StatTile
+              label="Memory"
+              value={formatMemory(summary?.memoryUsageMi)}
+              detail={`${formatPercent(summary?.memoryUsagePercent)} of ${formatMemory(summary?.memoryCapacityMi)}`}
+              tone="memory"
+            />
+            <StatTile
+              label="Pods"
+              value={`${summary?.runningPodCount || 0}/${summary?.podCount || 0}`}
+              detail={`${summary?.containerCount || 0} containers`}
+            />
+            <StatTile
+              label="GPU"
+              value={`${summary?.gpuAllocatable || 0}/${summary?.gpuCapacity || 0}`}
+              detail={summary?.gpuCapacity ? 'nvidia.com/gpu exposed' : 'GPU resource not exposed'}
+              tone={summary?.gpuCapacity ? 'gpu' : 'muted'}
+            />
+          </div>
+
+          {dashboard.warnings?.length ? (
+            <div className="monitorWarning">
+              {dashboard.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+            </div>
+          ) : null}
+
+          <div className="monitorSectionGrid">
+            <section className="monitorCard">
+              <div className="monitorCardHeader">
+                <span className="panelEyebrow">Nodes</span>
+                <strong>{summary?.nodeCount || 0} nodes</strong>
+              </div>
+              <div className="nodeUsageList">
+                {nodes.map((node) => (
+                  <article className="nodeUsageCard" key={node.name}>
+                    <div className="nodeUsageTitle">
+                      <div>
+                        <strong>{node.name}</strong>
+                        <span>{node.role} · {node.status} · {node.podCount} pods</span>
+                      </div>
+                      <span className="statusPill ok">{formatPercent(node.cpuUsagePercent)}</span>
+                    </div>
+                    <div className="nodeUsageMetric">
+                      <span>CPU {formatCpu(node.cpuUsageMilli)} / {formatCpu(node.cpuCapacityMilli)}</span>
+                      <UsageBar value={node.cpuUsagePercent} />
+                    </div>
+                    <div className="nodeUsageMetric">
+                      <span>RAM {formatMemory(node.memoryUsageMi)} / {formatMemory(node.memoryCapacityMi)}</span>
+                      <UsageBar value={node.memoryUsagePercent} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="monitorCard">
+              <div className="monitorCardHeader">
+                <span className="panelEyebrow">Namespaces</span>
+                <strong>{summary?.namespaceCount || 0} total</strong>
+              </div>
+              <div className="monitorTable compactTable">
+                <div className="monitorTableHead namespaceColumns">
+                  <span>Namespace</span>
+                  <span>Pods</span>
+                  <span>CPU</span>
+                  <span>RAM</span>
+                </div>
+                {namespaces.slice(0, 12).map((namespace) => (
+                  <div className="monitorTableRow namespaceColumns" key={namespace.name}>
+                    <strong>{namespace.name}</strong>
+                    <span>{namespace.runningPodCount}/{namespace.podCount}</span>
+                    <span>{formatCpu(namespace.cpuUsageMilli)}</span>
+                    <span>{formatMemory(namespace.memoryUsageMi)}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <section className="monitorCard containerMonitorCard">
+            <div className="monitorCardHeader">
+              <div>
+                <span className="panelEyebrow">Container Usage</span>
+                <strong>Top {containers.length} containers</strong>
+              </div>
+              <div className="chatHeaderActions">
+                <button type="button" className={`ghostButton compact ${containerSort === 'cpu' ? 'active' : ''}`} onClick={() => setContainerSort('cpu')}>CPU</button>
+                <button type="button" className={`ghostButton compact ${containerSort === 'memory' ? 'active' : ''}`} onClick={() => setContainerSort('memory')}>RAM</button>
+                <button type="button" className={`ghostButton compact ${containerSort === 'restart' ? 'active' : ''}`} onClick={() => setContainerSort('restart')}>Restart</button>
+              </div>
+            </div>
+            <div className="monitorTable containerTable">
+              <div className="monitorTableHead containerColumns">
+                <span>Namespace / Pod</span>
+                <span>Container</span>
+                <span>Node</span>
+                <span>CPU</span>
+                <span>RAM</span>
+                <span>Restarts</span>
+              </div>
+              {containers.map((container) => (
+                <div className="monitorTableRow containerColumns" key={`${container.namespace}/${container.pod}/${container.container}`}>
+                  <div className="containerPodCell">
+                    <strong>{container.namespace}</strong>
+                    <span>{container.pod}</span>
+                  </div>
+                  <span>{container.container}</span>
+                  <span>{container.node || '-'}</span>
+                  <span>{formatCpu(container.cpuUsageMilli)}</span>
+                  <span>{formatMemory(container.memoryUsageMi)}</span>
+                  <span>{container.restartCount}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1308,7 +1518,7 @@ export default function App() {
         </div>
         {auth.role === 'ADMIN' ? (
           <div className={rightPanel === 'monitor' ? 'panelVisible' : 'panelHidden'}>
-            <AdminMonitorPanel activeMonitor={activeMonitor} setActiveMonitor={setActiveMonitor} />
+            <AdminMonitorPanel authToken={auth.token} activeMonitor={activeMonitor} setActiveMonitor={setActiveMonitor} />
           </div>
         ) : null}
       </div>

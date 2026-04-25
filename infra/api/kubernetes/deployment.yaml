@@ -13,6 +13,7 @@ spec:
       labels:
         app: jupiter-api
     spec:
+      serviceAccountName: jupiter-api
       containers:
         - name: api
           image: jupiter-api:local

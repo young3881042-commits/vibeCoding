@@ -35,6 +35,8 @@ import com.platform.jupiter.files.WorkspaceRunResponse;
 import com.platform.jupiter.notebook.NotebookInstanceDto;
 import com.platform.jupiter.notebook.NotebookRequest;
 import com.platform.jupiter.notebook.NotebookService;
+import com.platform.jupiter.monitoring.ClusterMonitoringResponse;
+import com.platform.jupiter.monitoring.ClusterMonitoringService;
 import com.platform.jupiter.rag.RagAnswerResponse;
 import com.platform.jupiter.rag.RagDocumentSummary;
 import com.platform.jupiter.rag.RagQueryRequest;
@@ -54,6 +56,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -67,6 +70,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api")
@@ -85,6 +89,7 @@ public class JupiterController {
     private final TravelAnalyticsService travelAnalyticsService;
     private final RagService ragService;
     private final RagWorkspaceService ragWorkspaceService;
+    private final ClusterMonitoringService clusterMonitoringService;
 
     public JupiterController(
             AppProperties appProperties,
@@ -100,7 +105,8 @@ public class JupiterController {
             FoodShowAnalyticsService foodShowAnalyticsService,
             TravelAnalyticsService travelAnalyticsService,
             RagService ragService,
-            RagWorkspaceService ragWorkspaceService) {
+            RagWorkspaceService ragWorkspaceService,
+            ClusterMonitoringService clusterMonitoringService) {
         this.appProperties = appProperties;
         this.buildService = buildService;
         this.authService = authService;
@@ -115,6 +121,7 @@ public class JupiterController {
         this.travelAnalyticsService = travelAnalyticsService;
         this.ragService = ragService;
         this.ragWorkspaceService = ragWorkspaceService;
+        this.clusterMonitoringService = clusterMonitoringService;
     }
 
     @GetMapping("/overview")
@@ -410,6 +417,15 @@ public class JupiterController {
     @GetMapping("/travel/dashboard")
     public TravelDashboardResponse travelDashboard() {
         return travelAnalyticsService.dashboard();
+    }
+
+    @GetMapping("/monitoring/cluster")
+    public ClusterMonitoringResponse clusterMonitoring(HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        if (!session.admin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin only");
+        }
+        return clusterMonitoringService.snapshot();
     }
 
     @GetMapping("/rag/documents")

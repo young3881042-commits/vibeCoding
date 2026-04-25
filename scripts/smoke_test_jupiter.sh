@@ -42,7 +42,7 @@ echo "[smoke] API port-forward"
 API_PID=$!
 
 echo "[smoke] Web port-forward"
-"$KUBECTL_BIN" -n "$NAMESPACE" port-forward "svc/$WEB_SERVICE" "${WEB_PORT}:80" >"$WEB_LOG" 2>&1 &
+"$KUBECTL_BIN" -n "$NAMESPACE" port-forward "svc/$WEB_SERVICE" "${WEB_PORT}:5173" >"$WEB_LOG" 2>&1 &
 WEB_PID=$!
 
 echo "[smoke] Qdrant port-forward"

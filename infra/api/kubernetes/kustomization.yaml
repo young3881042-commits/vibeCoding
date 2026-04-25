@@ -6,5 +6,6 @@ configMapGenerator:
       - api.env
 
 resources:
+  - rbac.yaml
   - deployment.yaml
   - service.yaml
