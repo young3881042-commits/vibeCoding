@@ -15,5 +15,10 @@
 /apps/*/.gradle/
 /apps/*/.env
 /infra/**/.env
+**/.env.local
+**/.env.*.local
+**/auth.json
+**/.codex/
+**/secrets/
 **/__pycache__/
 *.pyc

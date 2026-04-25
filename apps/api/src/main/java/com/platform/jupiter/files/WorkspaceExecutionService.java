@@ -1,47 +1,76 @@
 package com.platform.jupiter.files;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.jupiter.config.AppProperties;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.ExecListener;
 import io.fabric8.kubernetes.client.dsl.ExecWatch;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayDeque;
-import java.util.Comparator;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class WorkspaceExecutionService {
+    private static final Logger log = LoggerFactory.getLogger(WorkspaceExecutionService.class);
     private static final long PYTHON_TIMEOUT_SECONDS = 20L;
     private static final long GEMINI_TIMEOUT_SECONDS = 180L;
+    private static final long CODEX_TIMEOUT_SECONDS = 180L;
     private static final int MAX_LOGS_PER_USER = 100;
     private static final int MAX_OUTPUT_CHARS = 4000;
+    private static final String SAFE_OPENAI_429_MESSAGE = "OpenAI API 사용량 한도 또는 모델 접근 권한 문제로 요청에 실패했습니다. 서버 관리자에게 문의하세요.";
+    private static final String SAFE_OPENAI_MODEL_MESSAGE = "OpenAI 모델 설정 또는 접근 권한 문제로 요청을 처리할 수 없습니다. 서버 관리자에게 문의하세요.";
+    private static final String SAFE_OPENAI_FAILURE_MESSAGE = "OpenAI API 요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 서버 관리자에게 문의하세요.";
 
     private final AppProperties appProperties;
     private final KubernetesClient kubernetesClient;
     private final FileService fileService;
+    private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
     private final Map<String, ArrayDeque<WorkspaceExecutionLogDto>> executionLogsByUser = new ConcurrentHashMap<>();
 
     public WorkspaceExecutionService(
             AppProperties appProperties,
             KubernetesClient kubernetesClient,
-            FileService fileService) {
+            FileService fileService,
+            ObjectMapper objectMapper) {
+        this(appProperties, kubernetesClient, fileService, objectMapper, HttpClient.newBuilder().build());
+    }
+
+    WorkspaceExecutionService(
+            AppProperties appProperties,
+            KubernetesClient kubernetesClient,
+            FileService fileService,
+            ObjectMapper objectMapper,
+            HttpClient httpClient) {
         this.appProperties = appProperties;
         this.kubernetesClient = kubernetesClient;
         this.fileService = fileService;
+        this.objectMapper = objectMapper;
+        this.httpClient = httpClient;
     }
 
     public WorkspaceRunResponse runPythonFile(
@@ -202,28 +231,51 @@ public class WorkspaceExecutionService {
         Path workingDirectory = resolveWorkingDirectory(request.directoryPath(), request.filePath(), username, admin, workspaceRoot);
         List<String> contextFiles = resolveContextFiles(request.contextFiles(), request.filePath(), username, admin);
         String compiledPrompt = buildPromptWithContext(prompt, contextFiles, username, admin);
-
-        String command = "CI=1 NO_COLOR=1 TERM=dumb /opt/jupiter-cli/bin/gemini -y -p " + shellQuote(compiledPrompt) + " 2>&1";
-        String shellCommand = "cd " + shellQuote(workingDirectory.toString())
-                + " && export HOME=" + shellQuote(workspaceHome.toString())
-                + " PATH=\"$PATH:/usr/local/bin:/usr/bin:/opt/jupiter-cli/bin\""
-                + " TERM=xterm-256color"
-                + " && " + buildGeminiBootstrap(workspaceHome)
-                + " && " + command;
-
-        ExecutionResult result = executeCommand(shellCommand, GEMINI_TIMEOUT_SECONDS);
+        String providerId = normalizeProvider(request.providerId());
+        String model = resolveOpenAiModel(request.model());
+        ExecutionResult result;
+        String command;
+        if ("codex-cli".equals(providerId)) {
+            if (!Boolean.TRUE.equals(appProperties.enableCodexCliMode())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Codex CLI Session Mode is disabled on this server");
+            }
+            command = "codex exec [prompt]";
+            String codexCommand = "cd " + shellQuote(workingDirectory.toString())
+                    + " && export HOME=" + shellQuote(workspaceHome.toString())
+                    + " PATH=\"$PATH:/usr/local/bin:/usr/bin:/opt/jupiter-cli/bin\""
+                    + " TERM=xterm-256color"
+                    + " && /opt/jupiter-cli/bin/codex exec " + shellQuote(compiledPrompt) + " 2>&1";
+            result = executeCommand(codexCommand, CODEX_TIMEOUT_SECONDS);
+        } else {
+            command = "openai.chat.completions";
+            result = executeOpenAiPrompt(compiledPrompt, model);
+            providerId = "openai";
+        }
         String relativeDirectory = workspaceRoot.equals(workingDirectory)
                 ? ""
                 : workspaceRoot.relativize(workingDirectory).toString().replace('\\', '/');
         WorkspaceGeminiResponse response = new WorkspaceGeminiResponse(
+                providerId,
+                "openai".equals(providerId) ? model : "codex-cli-session",
                 prompt,
                 result.output().trim(),
                 relativeDirectory,
                 result.exitCode(),
                 result.timedOut(),
                 contextFiles);
-        addLog(username, "gemini", relativeDirectory, command, response.exitCode(), response.timedOut(), response.output(), "");
+        addLog(username, providerId, relativeDirectory, command, response.exitCode(), response.timedOut(), response.output(), "");
         return response;
+    }
+
+    public WorkspaceLlmConfigResponse llmConfig() {
+        boolean openAiConfigured = appProperties.openAiApiKey() != null && !appProperties.openAiApiKey().isBlank();
+        boolean codexEnabled = Boolean.TRUE.equals(appProperties.enableCodexCliMode());
+        return new WorkspaceLlmConfigResponse(
+                resolveOpenAiModel(null),
+                openAiConfigured,
+                codexEnabled,
+                openAiConfigured ? "서버 환경변수 OPENAI_API_KEY 사용 중" : "OPENAI_API_KEY가 설정되지 않았습니다.",
+                codexEnabled ? "서버 Codex CLI 세션 모드 사용 가능" : "ENABLE_CODEX_CLI_MODE=false (비활성화)");
     }
 
     private String buildPythonCommand(Path file) {
@@ -316,6 +368,90 @@ public class WorkspaceExecutionService {
         }
         builder.append("\nUse these files as context while applying workspace changes.");
         return builder.toString();
+    }
+
+    private String normalizeProvider(String providerId) {
+        String normalized = providerId == null ? "" : providerId.trim().toLowerCase();
+        if ("codex-cli".equals(normalized)) {
+            return "codex-cli";
+        }
+        return "openai";
+    }
+
+    private String resolveOpenAiModel(String requestedModel) {
+        String fallback = appProperties.openAiModel() == null || appProperties.openAiModel().isBlank()
+                ? "gpt-5.2-codex"
+                : appProperties.openAiModel().trim();
+        if (requestedModel == null || requestedModel.isBlank()) {
+            return fallback;
+        }
+        return requestedModel.trim();
+    }
+
+    private ExecutionResult executeOpenAiPrompt(String compiledPrompt, String model) {
+        String openAiApiKey = appProperties.openAiApiKey();
+        if (openAiApiKey == null || openAiApiKey.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "서버 OpenAI 설정(OPENAI_API_KEY)이 누락되었습니다.");
+        }
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("model", model);
+            payload.put("messages", List.of(Map.of("role", "user", "content", compiledPrompt)));
+            String body = objectMapper.writeValueAsString(payload);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.openai.com/v1/chat/completions"))
+                    .timeout(java.time.Duration.ofSeconds(GEMINI_TIMEOUT_SECONDS))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + openAiApiKey.trim())
+                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                String safeBody = maskSensitive(response.body());
+                if (response.statusCode() == 429) {
+                    log.warn("OpenAI API 429 error: {}", truncate(safeBody));
+                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, SAFE_OPENAI_429_MESSAGE);
+                }
+                if (response.statusCode() == 400 || response.statusCode() == 401 || response.statusCode() == 403 || response.statusCode() == 404) {
+                    log.warn("OpenAI API model/access issue status={}, body={}", response.statusCode(), truncate(safeBody));
+                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, SAFE_OPENAI_MODEL_MESSAGE);
+                }
+                log.warn("OpenAI API error status={}, body={}", response.statusCode(), truncate(safeBody));
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, SAFE_OPENAI_FAILURE_MESSAGE);
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            String output = extractAssistantMessage(root);
+            if (output.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI API 응답이 비어 있습니다.");
+            }
+            return new ExecutionResult(output, 0, false);
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, SAFE_OPENAI_FAILURE_MESSAGE, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, SAFE_OPENAI_FAILURE_MESSAGE, e);
+        }
+    }
+
+    private String extractAssistantMessage(JsonNode root) {
+        JsonNode content = root.path("choices").path(0).path("message").path("content");
+        if (content.isTextual()) {
+            return content.asText().trim();
+        }
+        if (content.isArray()) {
+            StringBuilder builder = new StringBuilder();
+            for (JsonNode item : content) {
+                String text = item.path("text").asText("");
+                if (!text.isBlank()) {
+                    if (builder.length() > 0) {
+                        builder.append('\n');
+                    }
+                    builder.append(text.trim());
+                }
+            }
+            return builder.toString().trim();
+        }
+        return "";
     }
 
     public List<WorkspaceExecutionLogDto> listExecutionLogs(String username, int limit) {
@@ -464,9 +600,9 @@ public class WorkspaceExecutionService {
                 targetPath == null ? "" : targetPath,
                 command,
                 exitCode,
-                timedOut,
-                truncate(output),
-                Instant.now());
+            timedOut,
+            truncate(maskSensitive(output)),
+            Instant.now());
         ArrayDeque<WorkspaceExecutionLogDto> queue = executionLogsByUser.computeIfAbsent(username, unused -> new ArrayDeque<>());
         synchronized (queue) {
             queue.addFirst(log);
@@ -496,6 +632,17 @@ public class WorkspaceExecutionService {
             return output;
         }
         return output.substring(0, MAX_OUTPUT_CHARS) + "\n...(truncated)";
+    }
+
+    private String maskSensitive(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        return raw
+                .replaceAll("(?i)authorization\\s*:\\s*bearer\\s+[A-Za-z0-9._\\-]+", "authorization: bearer [REDACTED]")
+                .replaceAll("(?i)bearer\\s+[A-Za-z0-9._\\-]+", "bearer [REDACTED]")
+                .replaceAll("(?i)sk-[A-Za-z0-9_-]+", "sk-[REDACTED]")
+                .replaceAll("(?i)sk-proj-[A-Za-z0-9_-]+", "sk-proj-[REDACTED]");
     }
 
     private record ExecutionResult(String output, int exitCode, boolean timedOut) {

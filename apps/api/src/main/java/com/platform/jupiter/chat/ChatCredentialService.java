@@ -75,9 +75,6 @@ public class ChatCredentialService {
 
     public List<ChatProviderStatus> listProviderStatuses(String username) {
         boolean geminiEnabled = isGeminiOauthConfigured();
-        boolean openAiConnected = findCredential(username, PROVIDER_OPENAI)
-                .map(credential -> credential.apiKey() != null && !credential.apiKey().isBlank())
-                .orElse(false);
         boolean openAiServerConfigured = appProperties.openAiApiKey() != null && !appProperties.openAiApiKey().isBlank();
         boolean geminiConnected = findCredential(username, PROVIDER_GEMINI)
                 .map(credential -> credential.refreshToken() != null && !credential.refreshToken().isBlank())
@@ -88,10 +85,10 @@ public class ChatCredentialService {
                         PROVIDER_OPENAI,
                         "OpenAI",
                         true,
-                        openAiConnected || openAiServerConfigured,
-                        openAiConnected ? "사용자 키가 서버에 저장되어 있습니다." : (openAiServerConfigured ? "서버 기본 OpenAI 키를 사용합니다." : "연결되지 않음"),
+                        openAiServerConfigured,
+                        openAiServerConfigured ? "서버 환경변수 OPENAI_API_KEY 사용 중" : "OPENAI_API_KEY가 설정되지 않았습니다.",
                         "https://api.openai.com",
-                        "gpt-4o-mini"),
+                        appProperties.openAiModel() == null || appProperties.openAiModel().isBlank() ? "gpt-5.2-codex" : appProperties.openAiModel().trim()),
                 new ChatProviderStatus(
                         PROVIDER_GEMINI,
                         "Google Gemini",
@@ -102,14 +99,6 @@ public class ChatCredentialService {
                                 : "Gemini OAuth가 서버에 설정되지 않았습니다.",
                         "https://generativelanguage.googleapis.com/v1beta/openai",
                         "gemini-2.5-flash"));
-    }
-
-    public void saveOpenAiApiKey(String username, String apiKey) {
-        String trimmed = apiKey == null ? "" : apiKey.trim();
-        if (trimmed.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "OpenAI API key is required");
-        }
-        upsertCredential(username, PROVIDER_OPENAI, trimmed, null, null, null);
     }
 
     public void deleteCredential(String username, String provider) {
@@ -198,10 +187,6 @@ public class ChatCredentialService {
     }
 
     public Optional<String> resolveOpenAiApiKey(String username) {
-        Optional<StoredCredential> credential = findCredential(username, PROVIDER_OPENAI);
-        if (credential.isPresent() && credential.get().apiKey() != null && !credential.get().apiKey().isBlank()) {
-            return Optional.of(credential.get().apiKey().trim());
-        }
         if (appProperties.openAiApiKey() != null && !appProperties.openAiApiKey().isBlank()) {
             return Optional.of(appProperties.openAiApiKey().trim());
         }

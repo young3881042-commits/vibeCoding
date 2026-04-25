@@ -17,7 +17,6 @@ import com.platform.jupiter.chat.ChatProviderStatus;
 import com.platform.jupiter.chat.LocalChatService;
 import com.platform.jupiter.chat.OpenAiChatCompletionRequest;
 import com.platform.jupiter.chat.OpenAiChatCompletionResponse;
-import com.platform.jupiter.chat.SaveApiKeyRequest;
 import com.platform.jupiter.config.AppProperties;
 import com.platform.jupiter.foodshow.FoodShowAnalyticsService;
 import com.platform.jupiter.foodshow.FoodShowDashboardResponse;
@@ -30,6 +29,7 @@ import com.platform.jupiter.files.WorkspaceGeminiResponse;
 import com.platform.jupiter.files.WorkspaceExecutionLogDto;
 import com.platform.jupiter.files.WorkspaceExecutionService;
 import com.platform.jupiter.files.WorkspaceFileRequest;
+import com.platform.jupiter.files.WorkspaceLlmConfigResponse;
 import com.platform.jupiter.files.WorkspaceRenameRequest;
 import com.platform.jupiter.files.WorkspaceRenameResponse;
 import com.platform.jupiter.files.WorkspaceRunResponse;
@@ -269,6 +269,12 @@ public class JupiterController {
         return workspaceExecutionService.runGeminiPrompt(request, session.username(), session.admin());
     }
 
+    @GetMapping("/workspace/llm/config")
+    public WorkspaceLlmConfigResponse workspaceLlmConfig(HttpServletRequest servletRequest) {
+        authService.requireSession(servletRequest);
+        return workspaceExecutionService.llmConfig();
+    }
+
     @GetMapping("/workspace/executions")
     public List<WorkspaceExecutionLogDto> workspaceExecutions(
             @RequestParam(defaultValue = "20") int limit,
@@ -287,20 +293,6 @@ public class JupiterController {
     public List<ChatProviderStatus> chatProviders(HttpServletRequest servletRequest) {
         AuthSession session = authService.requireSession(servletRequest);
         return chatCredentialService.listProviderStatuses(session.username());
-    }
-
-    @PostMapping("/chat/providers/openai")
-    public ResponseEntity<Void> saveOpenAiKey(@Valid @RequestBody SaveApiKeyRequest request, HttpServletRequest servletRequest) {
-        AuthSession session = authService.requireSession(servletRequest);
-        chatCredentialService.saveOpenAiApiKey(session.username(), request.apiKey());
-        return ResponseEntity.ok().build();
-    }
-
-    @DeleteMapping("/chat/providers/openai")
-    public ResponseEntity<Void> deleteOpenAiKey(HttpServletRequest servletRequest) {
-        AuthSession session = authService.requireSession(servletRequest);
-        chatCredentialService.deleteCredential(session.username(), "openai");
-        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/chat/providers/gemini/link")

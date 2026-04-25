@@ -23,3 +23,5 @@ spec:
           envFrom:
             - configMapRef:
                 name: jupiter-api-env
+            - secretRef:
+                name: jupiter-api-secrets

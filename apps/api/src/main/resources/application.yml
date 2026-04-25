@@ -52,7 +52,9 @@ app:
   weather-locations: ${APP_WEATHER_LOCATIONS:Seoul:37.5665,126.9780;Busan:35.1796,129.0756;Incheon:37.4563,126.7052;Jeju:33.4996,126.5312;Gangneung:37.7519,128.8761}
   gemini-api-key: ${APP_GEMINI_API_KEY:}
   open-ai-api-key: ${APP_OPENAI_API_KEY:${OPENAI_API_KEY:}}
+  open-ai-model: ${APP_OPENAI_MODEL:${OPENAI_MODEL:gpt-5.2-codex}}
   grok-api-key: ${APP_GROK_API_KEY:}
+  enable-codex-cli-mode: ${ENABLE_CODEX_CLI_MODE:false}
   gemini-oauth-client-id: ${APP_GEMINI_OAUTH_CLIENT_ID:}
   gemini-oauth-client-secret: ${APP_GEMINI_OAUTH_CLIENT_SECRET:}
   gemini-oauth-redirect-uri: ${APP_GEMINI_OAUTH_REDIRECT_URI:}
