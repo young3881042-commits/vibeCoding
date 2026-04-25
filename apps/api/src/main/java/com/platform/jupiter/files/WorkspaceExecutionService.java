@@ -9,8 +9,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.springframework.http.HttpStatus;
@@ -21,10 +26,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class WorkspaceExecutionService {
     private static final long PYTHON_TIMEOUT_SECONDS = 20L;
     private static final long GEMINI_TIMEOUT_SECONDS = 180L;
+    private static final int MAX_LOGS_PER_USER = 100;
+    private static final int MAX_OUTPUT_CHARS = 4000;
 
     private final AppProperties appProperties;
     private final KubernetesClient kubernetesClient;
     private final FileService fileService;
+    private final Map<String, ArrayDeque<WorkspaceExecutionLogDto>> executionLogsByUser = new ConcurrentHashMap<>();
 
     public WorkspaceExecutionService(
             AppProperties appProperties,
@@ -83,20 +91,25 @@ public class WorkspaceExecutionService {
 
             boolean finished = done.await(PYTHON_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
-                return new WorkspaceRunResponse(
+                WorkspaceRunResponse timedOutResponse = new WorkspaceRunResponse(
                         command,
                         -1,
                         stdout.toString(StandardCharsets.UTF_8),
                         stderr.toString(StandardCharsets.UTF_8),
                         true);
+                addLog(username, "python", relativePath, timedOutResponse.command(), timedOutResponse.exitCode(), timedOutResponse.timedOut(),
+                        timedOutResponse.stdout(), timedOutResponse.stderr());
+                return timedOutResponse;
             }
             Integer exitCode = watch.exitCode().getNow(0);
-            return new WorkspaceRunResponse(
+            WorkspaceRunResponse response = new WorkspaceRunResponse(
                     command,
                     exitCode == null ? 0 : exitCode,
                     stdout.toString(StandardCharsets.UTF_8),
                     stderr.toString(StandardCharsets.UTF_8),
                     false);
+            addLog(username, "python", relativePath, response.command(), response.exitCode(), response.timedOut(), response.stdout(), response.stderr());
+            return response;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Python execution interrupted", e);
@@ -134,12 +147,25 @@ public class WorkspaceExecutionService {
         String relativeDirectory = workspaceRoot.equals(workingDirectory)
                 ? ""
                 : workspaceRoot.relativize(workingDirectory).toString().replace('\\', '/');
-        return new WorkspaceGeminiResponse(
+        WorkspaceGeminiResponse response = new WorkspaceGeminiResponse(
                 prompt,
                 result.output().trim(),
                 relativeDirectory,
                 result.exitCode(),
                 result.timedOut());
+        addLog(username, "gemini", relativeDirectory, command, response.exitCode(), response.timedOut(), response.output(), "");
+        return response;
+    }
+
+    public List<WorkspaceExecutionLogDto> listExecutionLogs(String username, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, MAX_LOGS_PER_USER));
+        ArrayDeque<WorkspaceExecutionLogDto> queue = executionLogsByUser.get(username);
+        if (queue == null || queue.isEmpty()) {
+            return List.of();
+        }
+        synchronized (queue) {
+            return queue.stream().limit(safeLimit).toList();
+        }
     }
 
     private Path resolveWorkingDirectory(
@@ -259,6 +285,56 @@ public class WorkspaceExecutionService {
 
     private String shellQuote(String value) {
         return "'" + value.replace("'", "'\"'\"'") + "'";
+    }
+
+    private void addLog(
+            String username,
+            String type,
+            String targetPath,
+            String command,
+            int exitCode,
+            boolean timedOut,
+            String stdout,
+            String stderr) {
+        String output = mergeOutput(stdout, stderr);
+        WorkspaceExecutionLogDto log = new WorkspaceExecutionLogDto(
+                UUID.randomUUID().toString(),
+                type,
+                targetPath == null ? "" : targetPath,
+                command,
+                exitCode,
+                timedOut,
+                truncate(output),
+                Instant.now());
+        ArrayDeque<WorkspaceExecutionLogDto> queue = executionLogsByUser.computeIfAbsent(username, unused -> new ArrayDeque<>());
+        synchronized (queue) {
+            queue.addFirst(log);
+            while (queue.size() > MAX_LOGS_PER_USER) {
+                queue.removeLast();
+            }
+        }
+    }
+
+    private String mergeOutput(String stdout, String stderr) {
+        String safeStdout = stdout == null ? "" : stdout.trim();
+        String safeStderr = stderr == null ? "" : stderr.trim();
+        if (safeStdout.isBlank() && safeStderr.isBlank()) {
+            return "";
+        }
+        if (safeStderr.isBlank()) {
+            return safeStdout;
+        }
+        if (safeStdout.isBlank()) {
+            return "[stderr]\n" + safeStderr;
+        }
+        return safeStdout + "\n\n[stderr]\n" + safeStderr;
+    }
+
+    private String truncate(String output) {
+        if (output.length() <= MAX_OUTPUT_CHARS) {
+            return output;
+        }
+        return output.substring(0, MAX_OUTPUT_CHARS) + "\n...(truncated)";
     }
 
     private record ExecutionResult(String output, int exitCode, boolean timedOut) {
