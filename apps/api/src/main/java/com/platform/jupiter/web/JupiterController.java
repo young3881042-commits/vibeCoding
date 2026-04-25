@@ -254,9 +254,13 @@ public class JupiterController {
     }
 
     @PostMapping("/workspace/run-python")
-    public WorkspaceRunResponse workspaceRunPython(@RequestParam String path, HttpServletRequest servletRequest) {
+    public WorkspaceRunResponse workspaceRunPython(
+            @RequestParam String path,
+            @RequestParam(defaultValue = "false") boolean autoFix,
+            @RequestParam(defaultValue = "true") boolean summarize,
+            HttpServletRequest servletRequest) {
         AuthSession session = authService.requireSession(servletRequest);
-        return workspaceExecutionService.runPythonFile(path, session.username(), session.admin());
+        return workspaceExecutionService.runPythonFile(path, session.username(), session.admin(), autoFix, summarize);
     }
 
     @PostMapping("/workspace/gemini")

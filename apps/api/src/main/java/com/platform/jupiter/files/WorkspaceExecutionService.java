@@ -6,12 +6,13 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.ExecListener;
 import io.fabric8.kubernetes.client.dsl.ExecWatch;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -43,7 +44,12 @@ public class WorkspaceExecutionService {
         this.fileService = fileService;
     }
 
-    public WorkspaceRunResponse runPythonFile(String relativePath, String username, boolean admin) {
+    public WorkspaceRunResponse runPythonFile(
+            String relativePath,
+            String username,
+            boolean admin,
+            boolean autoFixOnFailure,
+            boolean includeSummary) {
         if (relativePath == null || relativePath.isBlank() || !relativePath.endsWith(".py")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only .py files can be executed");
         }
@@ -54,13 +60,80 @@ public class WorkspaceExecutionService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Python file not found");
         }
 
-        String command = "python3 " + shellQuote(file.toString());
+        String command = buildPythonCommand(file);
         String shellCommand = "cd " + shellQuote(workspaceRoot.toString())
                 + " && export HOME=" + shellQuote(workspaceHome.toString())
                 + " PATH=\"$PATH:/usr/local/bin:/usr/bin:/opt/jupiter-cli/bin\""
                 + " TERM=xterm-256color"
                 + " && " + command;
 
+        PythonExecutionResult firstRun = executeShellCommandWithStreams(shellCommand, PYTHON_TIMEOUT_SECONDS);
+        List<String> autoFixNotes = new ArrayList<>();
+        boolean autoFixApplied = false;
+
+        addLog(
+                username,
+                "python",
+                relativePath,
+                command,
+                firstRun.exitCode(),
+                firstRun.timedOut(),
+                firstRun.stdout(),
+                firstRun.stderr());
+
+        PythonExecutionResult finalRun = firstRun;
+        if (autoFixOnFailure && shouldAttemptAutoFix(firstRun)) {
+            String autoFixPrompt = buildAutoFixPrompt(relativePath, firstRun.stdout(), firstRun.stderr());
+            String autoFixCommand = "CI=1 NO_COLOR=1 TERM=dumb /opt/jupiter-cli/bin/gemini -y -p " + shellQuote(autoFixPrompt) + " 2>&1";
+            String autoFixShellCommand = "cd " + shellQuote(workspaceRoot.toString())
+                    + " && export HOME=" + shellQuote(workspaceHome.toString())
+                    + " PATH=\"$PATH:/usr/local/bin:/usr/bin:/opt/jupiter-cli/bin\""
+                    + " TERM=xterm-256color"
+                    + " && " + buildGeminiBootstrap(workspaceHome)
+                    + " && " + autoFixCommand;
+            ExecutionResult autoFixResult = executeCommand(autoFixShellCommand, GEMINI_TIMEOUT_SECONDS);
+            autoFixNotes.add("Gemini auto-fix run exitCode=" + autoFixResult.exitCode() + ", timedOut=" + autoFixResult.timedOut());
+            if (!autoFixResult.output().isBlank()) {
+                autoFixNotes.add(truncate(autoFixResult.output().trim()));
+            }
+            addLog(
+                    username,
+                    "python-autofix",
+                    relativePath,
+                    autoFixCommand,
+                    autoFixResult.exitCode(),
+                    autoFixResult.timedOut(),
+                    autoFixResult.output(),
+                    "");
+
+            if (!autoFixResult.timedOut()) {
+                autoFixApplied = true;
+                finalRun = executeShellCommandWithStreams(shellCommand, PYTHON_TIMEOUT_SECONDS);
+                addLog(
+                        username,
+                        "python-retry",
+                        relativePath,
+                        command,
+                        finalRun.exitCode(),
+                        finalRun.timedOut(),
+                        finalRun.stdout(),
+                        finalRun.stderr());
+            }
+        }
+
+        String summary = includeSummary ? buildExecutionSummary(finalRun.stdout(), finalRun.stderr(), finalRun.exitCode(), finalRun.timedOut()) : "";
+        return new WorkspaceRunResponse(
+                command,
+                finalRun.exitCode(),
+                finalRun.stdout(),
+                finalRun.stderr(),
+                finalRun.timedOut(),
+                summary,
+                autoFixApplied,
+                autoFixNotes);
+    }
+
+    private PythonExecutionResult executeShellCommandWithStreams(String shellCommand, long timeoutSeconds) {
         Pod pod = resolveCliPod();
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
@@ -89,27 +162,20 @@ public class WorkspaceExecutionService {
                     })
                     .exec("sh", "-lc", shellCommand);
 
-            boolean finished = done.await(PYTHON_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            boolean finished = done.await(timeoutSeconds, TimeUnit.SECONDS);
             if (!finished) {
-                WorkspaceRunResponse timedOutResponse = new WorkspaceRunResponse(
-                        command,
-                        -1,
+                return new PythonExecutionResult(
                         stdout.toString(StandardCharsets.UTF_8),
                         stderr.toString(StandardCharsets.UTF_8),
+                        -1,
                         true);
-                addLog(username, "python", relativePath, timedOutResponse.command(), timedOutResponse.exitCode(), timedOutResponse.timedOut(),
-                        timedOutResponse.stdout(), timedOutResponse.stderr());
-                return timedOutResponse;
             }
             Integer exitCode = watch.exitCode().getNow(0);
-            WorkspaceRunResponse response = new WorkspaceRunResponse(
-                    command,
-                    exitCode == null ? 0 : exitCode,
+            return new PythonExecutionResult(
                     stdout.toString(StandardCharsets.UTF_8),
                     stderr.toString(StandardCharsets.UTF_8),
+                    exitCode == null ? 0 : exitCode,
                     false);
-            addLog(username, "python", relativePath, response.command(), response.exitCode(), response.timedOut(), response.stdout(), response.stderr());
-            return response;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Python execution interrupted", e);
@@ -134,8 +200,10 @@ public class WorkspaceExecutionService {
         Path workspaceRoot = fileService.workspaceRootPath(username, admin);
         Path workspaceHome = fileService.workspaceHomePath(username, admin);
         Path workingDirectory = resolveWorkingDirectory(request.directoryPath(), request.filePath(), username, admin, workspaceRoot);
+        List<String> contextFiles = resolveContextFiles(request.contextFiles(), request.filePath(), username, admin);
+        String compiledPrompt = buildPromptWithContext(prompt, contextFiles, username, admin);
 
-        String command = "CI=1 NO_COLOR=1 TERM=dumb /opt/jupiter-cli/bin/gemini -y -p " + shellQuote(prompt) + " 2>&1";
+        String command = "CI=1 NO_COLOR=1 TERM=dumb /opt/jupiter-cli/bin/gemini -y -p " + shellQuote(compiledPrompt) + " 2>&1";
         String shellCommand = "cd " + shellQuote(workingDirectory.toString())
                 + " && export HOME=" + shellQuote(workspaceHome.toString())
                 + " PATH=\"$PATH:/usr/local/bin:/usr/bin:/opt/jupiter-cli/bin\""
@@ -152,9 +220,102 @@ public class WorkspaceExecutionService {
                 result.output().trim(),
                 relativeDirectory,
                 result.exitCode(),
-                result.timedOut());
+                result.timedOut(),
+                contextFiles);
         addLog(username, "gemini", relativeDirectory, command, response.exitCode(), response.timedOut(), response.output(), "");
         return response;
+    }
+
+    private String buildPythonCommand(Path file) {
+        return "python3 " + shellQuote(file.toString());
+    }
+
+    private boolean shouldAttemptAutoFix(PythonExecutionResult result) {
+        return result.exitCode() != 0 && !result.timedOut();
+    }
+
+    private String buildAutoFixPrompt(String relativePath, String stdout, String stderr) {
+        return """
+                You are fixing a Python file after a failed run.
+                Target file: %s
+                Requirements:
+                - edit only files inside current workspace
+                - keep the original behavior intent
+                - fix root-cause errors shown below
+                - do not add markdown explanation, apply file edits directly
+                Recent stdout:
+                %s
+
+                Recent stderr:
+                %s
+                """.formatted(
+                relativePath,
+                truncate(stdout == null ? "" : stdout.trim()),
+                truncate(stderr == null ? "" : stderr.trim()));
+    }
+
+    private String buildExecutionSummary(String stdout, String stderr, int exitCode, boolean timedOut) {
+        if (timedOut) {
+            return "실행이 제한 시간 내 종료되지 않았습니다. 무한 루프/대기 입력 여부를 확인하세요.";
+        }
+        if (exitCode == 0) {
+            String trimmed = (stdout == null ? "" : stdout.trim());
+            if (trimmed.isBlank()) {
+                return "실행은 성공(exitCode=0)했지만 출력(stdout)이 비어 있습니다.";
+            }
+            String firstLine = trimmed.lines().findFirst().orElse("");
+            return "실행 성공(exitCode=0). 주요 출력: " + truncate(firstLine);
+        }
+        String errLine = (stderr == null ? "" : stderr.trim()).lines().findFirst().orElse("");
+        if (errLine.isBlank()) {
+            return "실행 실패(exitCode=" + exitCode + "). stderr가 비어 있어 전체 로그 확인이 필요합니다.";
+        }
+        return "실행 실패(exitCode=" + exitCode + "). 대표 오류: " + truncate(errLine);
+    }
+
+    private List<String> resolveContextFiles(List<String> requestContextFiles, String filePath, String username, boolean admin) {
+        List<String> candidates = new ArrayList<>();
+        if (requestContextFiles != null) {
+            candidates.addAll(requestContextFiles.stream()
+                    .filter(path -> path != null && !path.isBlank())
+                    .map(String::trim)
+                    .distinct()
+                    .limit(8)
+                    .toList());
+        }
+        if ((candidates.isEmpty()) && filePath != null && !filePath.isBlank()) {
+            candidates.add(filePath.trim());
+        }
+        List<String> resolved = new ArrayList<>();
+        for (String candidate : candidates) {
+            Path file = fileService.resolveWorkspacePath(candidate, username, admin);
+            if (Files.exists(file) && !Files.isDirectory(file)) {
+                resolved.add(candidate);
+            }
+        }
+        return resolved;
+    }
+
+    private String buildPromptWithContext(String prompt, List<String> contextFiles, String username, boolean admin) {
+        if (contextFiles.isEmpty()) {
+            return prompt;
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(prompt).append("\n\n");
+        builder.append("Additional workspace context files:\n");
+        for (String contextFile : contextFiles) {
+            Path file = fileService.resolveWorkspacePath(contextFile, username, admin);
+            String content;
+            try {
+                content = Files.readString(file);
+            } catch (Exception ex) {
+                content = "[unable to read file]";
+            }
+            builder.append("\n--- FILE: ").append(contextFile).append(" ---\n");
+            builder.append(truncate(content)).append('\n');
+        }
+        builder.append("\nUse these files as context while applying workspace changes.");
+        return builder.toString();
     }
 
     public List<WorkspaceExecutionLogDto> listExecutionLogs(String username, int limit) {
@@ -338,5 +499,8 @@ public class WorkspaceExecutionService {
     }
 
     private record ExecutionResult(String output, int exitCode, boolean timedOut) {
+    }
+
+    private record PythonExecutionResult(String stdout, String stderr, int exitCode, boolean timedOut) {
     }
 }
