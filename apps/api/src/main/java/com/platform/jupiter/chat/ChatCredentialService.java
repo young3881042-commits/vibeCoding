@@ -96,7 +96,7 @@ public class ChatCredentialService {
                         openAiConnected || openAiServerConfigured,
                         openAiConnected
                                 ? "사용자 키가 서버에 저장되어 있습니다."
-                                : (openAiServerConfigured ? "서버 환경변수 OPENAI_API_KEY 사용 중" : "OPENAI_API_KEY가 설정되지 않았습니다."),
+                                : (openAiServerConfigured ? "서버 기본 키 사용 중" : "연결되지 않음"),
                         "https://api.openai.com",
                         appProperties.openAiModel() == null || appProperties.openAiModel().isBlank() ? DEFAULT_CODEX_MODEL : appProperties.openAiModel().trim()),
                 new ChatProviderStatus(
@@ -207,10 +207,21 @@ public class ChatCredentialService {
     }
 
     public Optional<String> resolveOpenAiApiKey(String username) {
+        Optional<String> userKey = resolveUserOpenAiApiKey(username);
+        if (userKey.isPresent()) {
+            return userKey;
+        }
         if (appProperties.openAiApiKey() != null && !appProperties.openAiApiKey().isBlank()) {
             return Optional.of(appProperties.openAiApiKey().trim());
         }
         return Optional.empty();
+    }
+
+    public Optional<String> resolveUserOpenAiApiKey(String username) {
+        return findCredential(username, PROVIDER_OPENAI)
+                .map(StoredCredential::apiKey)
+                .map(String::trim)
+                .filter(value -> !value.isBlank());
     }
 
     public Optional<String> resolveGeminiAccessToken(String username) {
@@ -285,7 +296,7 @@ public class ChatCredentialService {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        errorMessage + ": HTTP " + response.statusCode() + " " + summarize(response.body()));
+                        errorMessage + ": HTTP " + response.statusCode() + " " + summarize(maskSensitive(response.body())));
             }
             JsonNode node = objectMapper.readTree(response.body());
             String accessToken = node.path("access_token").asText("").trim();
@@ -401,6 +412,18 @@ public class ChatCredentialService {
             return normalized;
         }
         return normalized.substring(0, 160).trim() + "...";
+    }
+
+    private String maskSensitive(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value
+                .replaceAll("(?i)authorization\\s*:\\s*bearer\\s+[A-Za-z0-9._\\-]+", "authorization: bearer [REDACTED]")
+                .replaceAll("(?i)bearer\\s+[A-Za-z0-9._\\-]+", "bearer [REDACTED]")
+                .replaceAll("(?i)sk-proj-[A-Za-z0-9_-]+", "sk-proj-[REDACTED]")
+                .replaceAll("(?i)sk-[A-Za-z0-9_-]+", "sk-[REDACTED]")
+                .replaceAll("(?i)(access_token|refresh_token|id_token|client_secret)\"?\\s*[:=]\\s*\"?[^\",\\s}]+", "$1=[REDACTED]");
     }
 
     private String encode(String value) {

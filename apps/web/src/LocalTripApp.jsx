@@ -792,7 +792,7 @@ function PlannerPage({ path, navigate }) {
     setGeneratedPlan(null);
     const session = readStoredAuth();
     if (!session?.token) {
-      setGenerateError('로그인 세션이 없습니다. /analysisadmin에서 로그인하고 Gemini를 연결한 뒤 다시 생성하세요.');
+      setGenerateError('로그인 세션이 없습니다. /analysisadmin에서 로그인하고 OpenAI/Codex API key를 저장한 뒤 다시 생성하세요.');
       setGenerating(false);
       return;
     }

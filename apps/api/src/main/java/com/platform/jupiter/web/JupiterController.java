@@ -401,8 +401,8 @@ public class JupiterController {
                 new ServiceLink(
                         "Nexus",
                         appProperties.nexusUrl(),
-                        appProperties.nexusUsername(),
-                        appProperties.nexusPassword().isBlank() ? "see kubernetes secret" : appProperties.nexusPassword(),
+                        maskIfPresent(appProperties.nexusUsername()),
+                        "hidden",
                         "Registry UI for pushed Jupiter images and package proxy."),
                 new ServiceLink(
                         "Launcher",
@@ -528,6 +528,10 @@ public class JupiterController {
 
     private String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private String maskIfPresent(String value) {
+        return value == null || value.isBlank() ? "-" : "hidden";
     }
 
     public record ChatProviderLinkResponse(String authorizationUrl) {

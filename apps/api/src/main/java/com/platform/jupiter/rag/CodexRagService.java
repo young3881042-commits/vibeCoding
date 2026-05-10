@@ -56,7 +56,7 @@ public class CodexRagService {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "Codex request failed: HTTP " + response.statusCode() + " " + summarize(response.body()));
+                    "Codex request failed. Check OpenAI/Codex key and model settings.");
         }
         JsonNode root = objectMapper.readTree(response.body());
         chatUsageService.recordUsage(username, "openai", codexModel(), extractUsage(root));

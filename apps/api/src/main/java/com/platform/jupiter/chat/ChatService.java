@@ -86,9 +86,10 @@ public class ChatService {
                     log.warn("Model API 429 status from provider={}, body={}", request.providerId(), summarize(maskSensitive(response.body())));
                     throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI API 사용량 한도 또는 모델 접근 권한 문제로 요청에 실패했습니다. 서버 관리자에게 문의하세요.");
                 }
+                log.warn("Model API request failed from provider={}, status={}, body={}", request.providerId(), response.statusCode(), summarize(maskSensitive(response.body())));
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        "Model API request failed: HTTP " + response.statusCode() + " " + summarize(maskSensitive(response.body())));
+                        "Model API request failed. Check provider, model, and key settings.");
             }
             JsonNode root = objectMapper.readTree(response.body());
             String content = extractAssistantMessage(root);

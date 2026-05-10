@@ -29,6 +29,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -52,6 +53,7 @@ public class WorkspaceExecutionService {
     private final HttpClient httpClient;
     private final Map<String, ArrayDeque<WorkspaceExecutionLogDto>> executionLogsByUser = new ConcurrentHashMap<>();
 
+    @Autowired
     public WorkspaceExecutionService(
             AppProperties appProperties,
             KubernetesClient kubernetesClient,
@@ -274,8 +276,8 @@ public class WorkspaceExecutionService {
                 resolveOpenAiModel(null),
                 openAiConfigured,
                 codexEnabled,
-                openAiConfigured ? "서버 환경변수 OPENAI_API_KEY 사용 중" : "OPENAI_API_KEY가 설정되지 않았습니다.",
-                codexEnabled ? "서버 Codex CLI 세션 모드 사용 가능" : "ENABLE_CODEX_CLI_MODE=false (비활성화)");
+                openAiConfigured ? "서버 기본 키 사용 중" : "OpenAI/Codex 키가 설정되지 않았습니다.",
+                codexEnabled ? "Codex CLI 세션 모드 사용 가능" : "Codex CLI 세션 모드 비활성화");
     }
 
     private String buildPythonCommand(Path file) {
@@ -391,7 +393,7 @@ public class WorkspaceExecutionService {
     private ExecutionResult executeOpenAiPrompt(String compiledPrompt, String model) {
         String openAiApiKey = appProperties.openAiApiKey();
         if (openAiApiKey == null || openAiApiKey.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "서버 OpenAI 설정(OPENAI_API_KEY)이 누락되었습니다.");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "서버 OpenAI/Codex 키가 설정되지 않았습니다.");
         }
         try {
             Map<String, Object> payload = new LinkedHashMap<>();

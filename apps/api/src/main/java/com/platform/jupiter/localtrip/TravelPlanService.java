@@ -23,7 +23,8 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class TravelPlanService {
     private static final List<String> TIME_SLOTS = List.of("오전", "점심", "오후");
-    private static final String GEMINI_MODEL = "gemini-2.0-flash";
+    private static final String PLAN_PROVIDER = "openai";
+    private static final String PLAN_MODEL = ChatCredentialService.DEFAULT_CODEX_MODEL;
     private static final int MAX_OUTPUT_TOKENS = 900;
 
     private final TravelPlanRepository travelPlanRepository;
@@ -85,21 +86,21 @@ public class TravelPlanService {
                 + pace + " 속도 추천 일정입니다.");
         TravelPlan savedPlan = travelPlanRepository.save(plan);
 
-        List<TravelPlanItem> items = generateItineraryWithGemini(savedPlan, request, username);
+        List<TravelPlanItem> items = generateItineraryWithLocalGpt(savedPlan, request, username);
         travelPlanItemRepository.saveAll(items);
 
         return TravelPlanResponse.from(savedPlan, travelPlanItemRepository.findByTravelPlanIdOrderByDayNumberAscSequenceNumberAsc(savedPlan.getId()));
     }
 
-    private List<TravelPlanItem> generateItineraryWithGemini(TravelPlan plan, TravelPlanGenerateRequest request, String username) {
+    private List<TravelPlanItem> generateItineraryWithLocalGpt(TravelPlan plan, TravelPlanGenerateRequest request, String username) {
         String prompt = buildPrompt(plan, request);
-        String token = chatCredentialService.resolveUserGeminiAuthorization(username)
+        String apiKey = chatCredentialService.resolveUserOpenAiApiKey(username)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "Gemini account is not connected for this user."));
+                        "OpenAI/Codex API key is not connected for this user."));
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("model", GEMINI_MODEL);
+            payload.put("model", PLAN_MODEL);
             payload.put("max_tokens", MAX_OUTPUT_TOKENS);
             payload.put("temperature", 0.35);
             payload.put(
@@ -111,10 +112,10 @@ public class TravelPlanService {
             );
 
             HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"))
+                    .uri(URI.create("https://api.openai.com/v1/chat/completions"))
                     .timeout(Duration.ofSeconds(120))
                     .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + token)
+                    .header("Authorization", "Bearer " + apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8))
                     .build();
 
@@ -122,11 +123,11 @@ public class TravelPlanService {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        "Gemini itinerary request failed: HTTP " + response.statusCode());
+                        "OpenAI/Codex itinerary request failed.");
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            chatUsageService.recordUsage(username, "gemini", GEMINI_MODEL, extractUsage(root));
+            chatUsageService.recordUsage(username, PLAN_PROVIDER, PLAN_MODEL, extractUsage(root));
             String content = root.path("choices").path(0).path("message").path("content").asText("");
             
             if (content.contains("```json")) {
@@ -166,6 +167,7 @@ public class TravelPlanService {
             "- 예산: %s\n" +
             "- 메모: %s\n\n" +
             "각 날짜마다 오전, 점심, 오후 3개만 만들고 note는 45자 이하로 써줘.\n" +
+            "API 키, 토큰, 서버 주소, 내부 설정 같은 민감정보는 절대 포함하지 마.\n" +
             "형식: [{\"dayNumber\": 1, \"timeSlot\": \"오전\", \"destinationName\": \"장소\", \"note\": \"설명\", \"primaryStyle\": \"테마\"}, ...]",
             plan.getRegion(),
             plan.getDays(),
@@ -223,7 +225,7 @@ public class TravelPlanService {
             item.setTimeSlot("종일");
             item.setDestinationName(plan.getRegion() + " 자유 여행");
             item.setRegion(plan.getRegion());
-            item.setNote("Gemini 일정 생성에 문제가 있어 기본 정보를 제공합니다.");
+            item.setNote("AI 일정 생성에 문제가 있어 기본 정보를 제공합니다.");
             item.setPrimaryStyle("자유");
             item.setDurationMinutes(480);
             items.add(item);
