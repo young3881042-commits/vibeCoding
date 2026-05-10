@@ -3297,23 +3297,37 @@ body {
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.04);
 }
 
-.ltDestinationCard:hover {
-  transform: translateY(-12px) scale(1.02);
-  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.12);
-  border-color: #ffffff;
+.ltDestinationPhoto {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: relative;
+  background-color: #f1f5f9;
+}
+
+.ltDestinationPhoto::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.1) 100%);
 }
 
 .ltDestinationPhoto span {
+  position: absolute;
   top: 20px;
   left: 20px;
+  z-index: 2;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   padding: 8px 16px;
   border-radius: 12px;
   font-size: 0.8rem;
   font-weight: 800;
   color: #3182ce;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .ltDestinationBody {
@@ -3509,13 +3523,22 @@ body {
   gap: 12px;
 }
 
+.ltDestinationCard:hover {
+  transform: translateY(-12px) scale(1.02);
+  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.12);
+  border-color: #ffffff;
+}
+
 .ltMiniDestPhoto {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
   flex-shrink: 0;
+  background-color: #f1f5f9;
+  border: 1px solid #edf2f7;
 }
 
 .ltMiniDestCard strong {
