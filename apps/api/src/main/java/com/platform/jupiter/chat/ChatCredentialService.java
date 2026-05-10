@@ -75,12 +75,16 @@ public class ChatCredentialService {
     }
 
     public List<ChatProviderStatus> listProviderStatuses(String username) {
-        boolean geminiEnabled = isGeminiOauthConfigured();
+        boolean geminiApiKeyConfigured = appProperties.geminiApiKey() != null && !appProperties.geminiApiKey().isBlank();
+        boolean geminiOauthConfigured = isGeminiOauthConfigured();
+        boolean geminiEnabled = geminiApiKeyConfigured || geminiOauthConfigured;
+
         boolean openAiConnected = findCredential(username, PROVIDER_OPENAI)
                 .map(credential -> credential.apiKey() != null && !credential.apiKey().isBlank())
                 .orElse(false);
         boolean openAiServerConfigured = appProperties.openAiApiKey() != null && !appProperties.openAiApiKey().isBlank();
-        boolean geminiConnected = findCredential(username, PROVIDER_GEMINI)
+        
+        boolean geminiConnected = geminiApiKeyConfigured || findCredential(username, PROVIDER_GEMINI)
                 .map(credential -> credential.refreshToken() != null && !credential.refreshToken().isBlank())
                 .orElse(false);
 
@@ -98,9 +102,11 @@ public class ChatCredentialService {
                         "Google Gemini",
                         geminiEnabled,
                         geminiConnected,
-                        geminiEnabled
-                                ? (geminiConnected ? "Google 로그인 완료" : "Google 계정을 연결하세요.")
-                                : "Gemini OAuth가 서버에 설정되지 않았습니다.",
+                        geminiApiKeyConfigured
+                                ? "서버 API 키를 사용합니다."
+                                : (geminiOauthConfigured
+                                        ? (geminiConnected ? "Google 로그인 완료" : "Google 계정을 연결하세요.")
+                                        : "Gemini 설정이 서버에 완료되지 않았습니다."),
                         "https://generativelanguage.googleapis.com/v1beta/openai",
                         "gemini-2.5-flash"));
     }

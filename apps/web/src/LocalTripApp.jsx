@@ -295,25 +295,31 @@ function LocalTripNav({ path, navigate }) {
 
   return (
     <header className="ltNav">
-      <a className="ltBrand" href="/" onClick={(event) => routeClick(event, '/', navigate)}>
-        <span>LocalTrip</span>
-        <strong>AI</strong>
-      </a>
-      <nav className="ltNavLinks" aria-label="LocalTrip navigation">
-        {items.map((item) => (
-          <a
-            key={item.to}
-            href={item.to}
-            className={path === item.to || (item.to !== '/' && path.startsWith(`${item.to}/`)) ? 'active' : ''}
-            onClick={(event) => routeClick(event, item.to, navigate)}
-          >
-            {item.label}
-          </a>
-        ))}
-      </nav>
-      <a className="ltNavAction" href="/planner" onClick={(event) => routeClick(event, '/planner', navigate)}>
-        New Plan
-      </a>
+      <div className="ltNavInner">
+        <a className="ltBrand" href="/" onClick={(event) => routeClick(event, '/', navigate)}>
+          <strong>LT</strong>
+          <span>LocalTrip AI</span>
+        </a>
+        <nav className="ltNavLinks" aria-label="LocalTrip navigation">
+          {items.map((item) => (
+            <a
+              key={item.to}
+              href={item.to}
+              className={path === item.to || (item.to !== '/' && path.startsWith(`${item.to}/`)) ? 'active' : ''}
+              onClick={(event) => routeClick(event, item.to, navigate)}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+        <a className="ltNavAction" href="/planner" onClick={(event) => routeClick(event, '/planner', navigate)}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          New Plan
+        </a>
+      </div>
     </header>
   );
 }
@@ -327,7 +333,14 @@ function DestinationCard({ destination, compact = false, navigate }) {
       <div className="ltDestinationBody">
         <div className="ltCardTopline">
           <span>{destination.region}</span>
-          {destination.rating ? <strong>{destination.rating.toFixed(1)}</strong> : null}
+          {destination.rating ? (
+            <strong style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#e11d48" stroke="#e11d48" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+              {destination.rating.toFixed(1)}
+            </strong>
+          ) : null}
         </div>
         <h3>{destination.name}</h3>
         <p>{destination.summary}</p>
@@ -335,8 +348,12 @@ function DestinationCard({ destination, compact = false, navigate }) {
           {destination.tags.map((tag) => <span key={tag}>{tag}</span>)}
         </div>
         {!compact ? (
-          <button type="button" className="ltTextButton" onClick={() => navigate(`/planner?destination=${encodeURIComponent(destination.id)}`)}>
+          <button type="button" className="ltTextButton" onClick={() => navigate(`/planner?destination=${encodeURIComponent(destination.id)}`)} style={{ marginTop: '12px', color: '#0f766e', fontWeight: '700', cursor: 'pointer', border: 'none', background: 'none', padding: '0', display: 'flex', alignItems: 'center', gap: '4px' }}>
             Plan this trip
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
           </button>
         ) : null}
       </div>
@@ -396,25 +413,31 @@ function HomePage({ navigate }) {
       <section className="ltHero">
         <div className="ltHeroCopy">
           <span className="ltEyebrow">LocalTrip AI</span>
-          <h1>Local trips shaped around real place signals.</h1>
-          <p>Discover destination pockets, compare trip styles, and turn local demand data into a practical itinerary.</p>
+          <h1>Experience Local Like Never Before.</h1>
+          <p>Discover hidden gems, plan customized routes, and explore the best of local destinations with our AI-powered travel companion.</p>
           <div className="ltHeroActions">
-            <a href="/planner" onClick={(event) => routeClick(event, '/planner', navigate)}>Start planning</a>
-            <a href="/destinations" onClick={(event) => routeClick(event, '/destinations', navigate)}>Browse places</a>
+            <a href="/planner" onClick={(event) => routeClick(event, '/planner', navigate)}>
+              Get Started
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '8px' }}>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </a>
+            <a href="/destinations" onClick={(event) => routeClick(event, '/destinations', navigate)}>Browse Places</a>
           </div>
         </div>
         <div className="ltHeroPanel">
           <div>
-            <span>Active destinations</span>
+            <span>Active Destinations</span>
             <strong>{loading ? '-' : formatNumber(destinations.length)}</strong>
           </div>
           <div>
-            <span>Saved plans</span>
+            <span>Community Plans</span>
             <strong>{plansLoading ? '-' : formatNumber(plans.length)}</strong>
           </div>
           <div>
-            <span>Route mode</span>
-            <strong>Day-by-day</strong>
+            <span>AI Efficiency</span>
+            <strong>100%</strong>
           </div>
         </div>
       </section>
@@ -423,10 +446,16 @@ function HomePage({ navigate }) {
 
       <section className="ltSectionHeader">
         <div>
-          <span className="ltEyebrow">Destinations</span>
-          <h2>Current picks</h2>
+          <h2>Featured Destinations</h2>
+          <p style={{ color: '#64748b', marginTop: '4px' }}>Hand-picked locations for your next adventure</p>
         </div>
-        <a href="/destinations" onClick={(event) => routeClick(event, '/destinations', navigate)}>View all</a>
+        <a href="/destinations" onClick={(event) => routeClick(event, '/destinations', navigate)} className="ltTextButton" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          View all
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </a>
       </section>
       <div className="ltDestinationGrid">
         {topDestinations.map((destination) => (
@@ -434,22 +463,25 @@ function HomePage({ navigate }) {
         ))}
       </div>
 
-      <section className="ltSplitSection">
+      <section className="ltSplitSection" style={{ marginTop: '80px', gap: '32px' }}>
         <div className="ltPlannerTeaser">
-          <span className="ltEyebrow">Planner</span>
-          <h2>Generate a clean route with stops, pacing, and timing.</h2>
-          <p>Choose a destination, travel pace, interests, and dates. LocalTrip AI sends the request to the travel plan generator.</p>
-          <button type="button" onClick={() => navigate('/planner')}>Open planner</button>
+          <h2>Ready to plan your next journey?</h2>
+          <p>Our AI analyzes thousands of data points to create the perfect itinerary tailored just for you.</p>
+          <button type="button" onClick={() => navigate('/planner')}>
+            Try AI Planner
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '8px' }}>
+              <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polyline>
+            </svg>
+          </button>
         </div>
         <div className="ltRecentPlans">
           <div className="ltSectionHeader compact">
             <div>
-              <span className="ltEyebrow">Plans</span>
-              <h2>Recent plans</h2>
+              <h2>Recent Itineraries</h2>
             </div>
           </div>
           {plans.length ? plans.map((plan) => <PlanCard key={plan.key} plan={plan} navigate={navigate} />) : (
-            <div className="ltEmptyState">No saved travel plans yet.</div>
+            <div className="ltEmptyState">No travel plans yet. Be the first!</div>
           )}
         </div>
       </section>
@@ -757,18 +789,32 @@ function ItineraryTimeline({ itinerary }) {
         <section className="ltTimelineDay" key={day.day}>
           <div className="ltTimelineDayHeader">
             <span>Day {day.day}</span>
-            <h2>{day.title}</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginTop: '8px' }}>{day.title}</h2>
           </div>
           <div className="ltTimelineItems">
             {day.items.map((item, index) => (
               <article className="ltTimelineItem" key={`${day.day}-${item.title}-${index}`}>
-                <time>{item.time || 'Flexible'}</time>
+                <time style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  {item.time || 'Flexible'}
+                </time>
                 <div>
-                  <h3>{item.title}</h3>
-                  {item.place ? <span>{item.place}</span> : null}
-                  {item.note ? <p>{item.note}</p> : null}
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a' }}>{item.title}</h3>
+                  {item.place ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                      </svg>
+                      {item.place}
+                    </span>
+                  ) : null}
+                  {item.note ? <p style={{ marginTop: '8px', color: '#475569', fontSize: '0.93rem' }}>{item.note}</p> : null}
                   {item.tags.length ? (
-                    <div className="ltTagRow small">
+                    <div className="ltTagRow small" style={{ marginTop: '12px' }}>
                       {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
                     </div>
                   ) : null}

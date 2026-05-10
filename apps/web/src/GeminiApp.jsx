@@ -151,10 +151,14 @@ function ProviderControls({
         ) : null}
         {selectedProvider?.id === 'gemini' ? (
           <div className="llmKeyActions">
-            <button type="button" className="sendButton" onClick={onLinkGemini} disabled={!selectedProvider.enabled || selectedProvider.connected}>
-              Google 연결
-            </button>
-            {selectedProvider.connected ? (
+            {!selectedProvider.connected ? (
+              <button type="button" className="sendButton" onClick={onLinkGemini} disabled={!selectedProvider.enabled}>
+                Google 연결
+              </button>
+            ) : (
+              <span className="statusPill ok">서버 연결 완료</span>
+            )}
+            {selectedProvider.connected && !selectedProvider.message?.includes('서버 API 키') ? (
               <button type="button" className="ghostButton compact" onClick={onDeleteGemini}>
                 연결 해제
               </button>
