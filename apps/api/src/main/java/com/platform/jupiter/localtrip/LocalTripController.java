@@ -1,5 +1,8 @@
 package com.platform.jupiter.localtrip;
 
+import com.platform.jupiter.auth.AuthService;
+import com.platform.jupiter.auth.AuthSession;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -17,10 +20,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class LocalTripController {
     private final LocalTripDestinationService destinationService;
     private final TravelPlanService travelPlanService;
+    private final AuthService authService;
 
-    public LocalTripController(LocalTripDestinationService destinationService, TravelPlanService travelPlanService) {
+    public LocalTripController(
+            LocalTripDestinationService destinationService,
+            TravelPlanService travelPlanService,
+            AuthService authService) {
         this.destinationService = destinationService;
         this.travelPlanService = travelPlanService;
+        this.authService = authService;
     }
 
     @GetMapping("/destinations")
@@ -45,8 +53,11 @@ public class LocalTripController {
     }
 
     @PostMapping("/travel-plans/generate")
-    public TravelPlanResponse generateTravelPlan(@Valid @RequestBody TravelPlanGenerateRequest request) {
-        return travelPlanService.generate(request);
+    public TravelPlanResponse generateTravelPlan(
+            @Valid @RequestBody TravelPlanGenerateRequest request,
+            HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        return travelPlanService.generate(request, session.username());
     }
 
     @GetMapping("/travel-plans")

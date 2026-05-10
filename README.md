@@ -109,7 +109,7 @@ Jupiter Workspace는 분석 업무용 웹 UI, API, DB, 실행 인프라를 한 �
 
 ## LocalTrip AI
 
-LocalTrip AI는 한국관광공사 TourAPI 연동을 준비한 국내 여행 일정 생성 MVP입니다. 기존 분석 워크스페이스는 `/analysis`에 유지하고, 웹 루트 `/`에는 LocalTrip AI를 배치했습니다.
+LocalTrip AI는 한국관광공사 TourAPI 연동을 준비한 국내 여행 일정 생성 MVP입니다. 기존 분석 워크스페이스는 `/analysisadmin`에 유지하고, 웹 루트 `/`에는 LocalTrip AI를 배치했습니다.
 
 ### 프로젝트 개요
 
@@ -138,7 +138,7 @@ LocalTrip AI는 한국관광공사 TourAPI 연동을 준비한 국내 여행 일
 ### 현재 실행 주소
 
 - LocalTrip AI Web: `http://192.168.45.101:31088/`
-- 기존 Jupiter 분석 워크스페이스: `http://192.168.45.101:31088/analysis`
+- 기존 Jupiter 분석 워크스페이스: `http://192.168.45.101:31088/analysisadmin`
 - API NodePort: `http://192.168.45.101:31090`
 
 ### 실행 방법

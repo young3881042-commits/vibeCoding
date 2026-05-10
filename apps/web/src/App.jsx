@@ -1567,7 +1567,19 @@ export default function App() {
 
   const routePath = path.split('?')[0];
 
+  useEffect(() => {
+    if (routePath === '/analysis' || routePath.startsWith('/analysis/')) {
+      const nextPath = `/analysisadmin${routePath.slice('/analysis'.length)}${path.includes('?') ? `?${path.split('?').slice(1).join('?')}` : ''}`;
+      window.history.replaceState({}, '', nextPath);
+      setPath(currentPath());
+    }
+  }, [path, routePath]);
+
   if (routePath === '/analysis' || routePath.startsWith('/analysis/')) {
+    return null;
+  }
+
+  if (routePath === '/analysisadmin' || routePath.startsWith('/analysisadmin/')) {
     return <WorkspaceApp />;
   }
 

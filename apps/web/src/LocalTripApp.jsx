@@ -1,52 +1,92 @@
 import { useEffect, useMemo, useState } from 'react';
 
+const AUTH_KEY = 'codex-workspace-auth';
+
+function commonsImage(fileName, width = 1200) {
+  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(fileName)}?width=${width}`;
+}
+
 const DEFAULT_IMAGES = [
-  'https://images.unsplash.com/photo-1538485399081-7c8edc8e7f8a?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1519677100203-a0e668c92439?auto=format&fit=crop&w=1200&q=80'
+  commonsImage('Gyeongbokgung Palace Main Gate.jpg'),
+  commonsImage('Gamcheon Culture Village.jpg'),
+  commonsImage('Seongsan Ilchulbong 01.jpg'),
+  commonsImage('Bulguksa temple main building.jpg')
 ];
+
+const DESTINATION_IMAGES = {
+  'SEOUL-001': commonsImage('Gyeongbokgung Palace Main Gate.jpg'),
+  'SEOUL-002': commonsImage('Bukchon Hanok Village 05.jpg'),
+  'SEOUL-003': commonsImage('Cafe storefront in Seongsu-dong.jpg'),
+  'SEOUL-004': commonsImage('Mercado Mangwon en Seúl.jpg'),
+  'SEOUL-005': commonsImage('Yeouido, Seoul.jpg'),
+  'SEOUL-006': commonsImage('N Seoul Tower a4.jpg'),
+  'GYEONGJU-001': commonsImage('Bulguksa temple main building.jpg'),
+  'GYEONGJU-002': commonsImage('Donggung Palace and Wolji Pond in Gyeongju.jpg'),
+  'GYEONGJU-003': commonsImage('Cheomseongdae, Gyeongju.jpg'),
+  'GYEONGJU-004': commonsImage('Street in Gyeongju.jpg'),
+  'GYEONGJU-005': commonsImage('Bomun Lake.jpg'),
+  'GYEONGJU-006': commonsImage('Gyochon Village 1.jpg'),
+  'BUSAN-001': commonsImage('Gamcheon Culture Village.jpg'),
+  'BUSAN-002': commonsImage('Haeundae beach in Busan.jpg'),
+  'BUSAN-003': commonsImage('Gwangalli Beach in Busan.jpg'),
+  'BUSAN-004': commonsImage('Gukje Market.jpg'),
+  'BUSAN-005': commonsImage('Seomyeon Street.jpg'),
+  'BUSAN-006': commonsImage('Taejongdae in Busan.jpg'),
+  'JEJU-001': commonsImage('Seongsan Ilchulbong 01.jpg'),
+  'JEJU-002': commonsImage('Udo, Jeju Province, South Korea 01.jpg'),
+  'JEJU-003': commonsImage('Hyeop-jae Beach.jpg'),
+  'JEJU-004': commonsImage('Jeju dongmun market 1.JPG'),
+  'JEJU-005': commonsImage('Aewol in Jeju island.jpg'),
+  'JEJU-006': commonsImage('Bijarim forest, Jeju.jpg')
+};
 
 const FALLBACK_DESTINATIONS = [
   {
     id: 'seoul-seongsu',
-    name: 'Seongsu, Seoul',
-    region: 'Seoul',
-    summary: 'Design studios, cafes, river walks, and small galleries packed into a compact city route.',
-    tags: ['design', 'cafes', 'walkable'],
-    category: 'City',
+    name: '성수 카페거리',
+    region: '서울',
+    summary: '로스터리, 편집숍, 갤러리를 짧은 도보 동선으로 묶는 서울 동부 상권입니다.',
+    tags: ['카페', '커플', '사진'],
+    category: '카페',
     rating: 4.8,
-    liveVisitors: 18420,
-    imageUrl: DEFAULT_IMAGES[0]
+    reviewCount: 91,
+    liveVisitors: 91,
+    imageUrl: DESTINATION_IMAGES['SEOUL-003']
   },
   {
     id: 'busan-yeongdo',
-    name: 'Yeongdo, Busan',
-    region: 'Busan',
-    summary: 'Harbor viewpoints, market food, coastal roads, and slower neighborhoods beyond the beach strip.',
-    tags: ['coast', 'food', 'views'],
-    category: 'Coast',
+    name: '감천문화마을',
+    region: '부산',
+    summary: '계단식 마을 풍경과 전망 포인트를 함께 보는 부산 대표 촬영 코스입니다.',
+    tags: ['사진', '가족', '커플'],
+    category: '마을',
     rating: 4.7,
-    liveVisitors: 12650,
-    imageUrl: DEFAULT_IMAGES[1]
+    reviewCount: 89,
+    liveVisitors: 89,
+    imageUrl: DESTINATION_IMAGES['BUSAN-001']
   },
   {
     id: 'jeju-seogwipo',
-    name: 'Seogwipo, Jeju',
-    region: 'Jeju',
-    summary: 'Waterfalls, local markets, volcanic trails, and quiet stays for a restorative island plan.',
-    tags: ['nature', 'market', 'slow'],
-    category: 'Nature',
+    name: '성산일출봉',
+    region: '제주',
+    summary: '분화구 능선과 동부 해안 전망을 함께 보는 제주 핵심 자연 명소입니다.',
+    tags: ['자연', '사진', '가족'],
+    category: '오름',
     rating: 4.9,
-    liveVisitors: 15310,
-    imageUrl: DEFAULT_IMAGES[2]
+    reviewCount: 97,
+    liveVisitors: 97,
+    imageUrl: DESTINATION_IMAGES['JEJU-001']
   }
 ];
 
 const INTERESTS = ['맛집', '자연', '역사', '카페', '가족', '커플', '사진'];
 
 async function localTripRequest(path, { method = 'GET', body } = {}) {
-  const headers = { Accept: 'application/json' };
+  const session = readStoredAuth();
+  const headers = {
+    Accept: 'application/json',
+    ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {})
+  };
   const init = { method, headers };
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -58,6 +98,15 @@ async function localTripRequest(path, { method = 'GET', body } = {}) {
   }
   const text = await response.text();
   return text ? JSON.parse(text) : null;
+}
+
+function readStoredAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
 function pickString(...values) {
@@ -106,10 +155,31 @@ function normalizeTags(...values) {
   return Array.from(new Set(tags)).slice(0, 6);
 }
 
+function regionImage(region, index = 0) {
+  const normalized = `${region || ''}`.toLowerCase();
+  if (normalized.includes('서울') || normalized.includes('seoul')) return DEFAULT_IMAGES[0];
+  if (normalized.includes('부산') || normalized.includes('busan')) return DEFAULT_IMAGES[1];
+  if (normalized.includes('제주') || normalized.includes('jeju')) return DEFAULT_IMAGES[2];
+  if (normalized.includes('경주') || normalized.includes('gyeongju')) return DEFAULT_IMAGES[3];
+  return DEFAULT_IMAGES[index % DEFAULT_IMAGES.length];
+}
+
+function destinationImage(row, index = 0) {
+  const explicit = pickString(row.imageUrl, row.image_url, row.photoUrl, row.thumbnailUrl);
+  if (explicit) return explicit;
+  const sourceRef = pickString(row.sourceRef, row.source_ref, row.code);
+  if (sourceRef && DESTINATION_IMAGES[sourceRef]) return DESTINATION_IMAGES[sourceRef];
+  return regionImage(pickString(row.region, row.regionName, row.region_name, row.area), index);
+}
+
 function normalizeDestination(raw, index = 0) {
   const row = raw || {};
   const tags = normalizeTags(row.styleTags, row.style_tags, row.primaryStyle, row.primary_style, row.tags, row.tagsJson, row.tags_json, row.keywords);
   const id = pickString(row.id, row.destinationId, row.destination_id, row.placeId, row.place_id, row.code) || `destination-${index}`;
+  const popularityScore = pickNumber(row.popularityScore, row.popularity_score, row.reviewCount, row.review_count, row.reviews);
+  const rawRating = pickNumber(row.rating, row.score, row.reviewScore, row.review_score);
+  const rating = rawRating || (popularityScore ? Math.min(5, Math.max(3.8, popularityScore / 20)) : 0);
+  const reviewCount = pickNumber(row.reviewCount, row.review_count, row.reviews, row.visitorCount, row.visitors, row.popularityScore, row.popularity_score, row.liveVisitors);
   return {
     id,
     name: pickString(row.name, row.title, row.destinationName, row.destination_name, row.placeName, row.place_name, row.districtName, row.district_name) || 'Untitled destination',
@@ -118,10 +188,11 @@ function normalizeDestination(raw, index = 0) {
     category: pickString(row.category, row.primaryStyle, row.primary_style, row.theme, row.destinationType, row.type) || 'Local',
     address: pickString(row.address, row.roadAddress, row.road_address),
     tags: tags.length ? tags : ['local', 'recommended'],
-    rating: pickNumber(row.rating, row.score, row.reviewScore),
-    liveVisitors: pickNumber(row.liveVisitors, row.visitorCount, row.visitors, row.popularityScore),
+    rating,
+    reviewCount,
+    liveVisitors: reviewCount,
     occupancyRate: pickNumber(row.occupancyRate, row.congestionRate, row.busyRate),
-    imageUrl: pickString(row.imageUrl, row.image_url, row.photoUrl, row.thumbnailUrl) || DEFAULT_IMAGES[index % DEFAULT_IMAGES.length]
+    imageUrl: destinationImage(row, index)
   };
 }
 
@@ -222,6 +293,66 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function buildRegionStats(destinations) {
+  const grouped = new Map();
+  destinations.forEach((destination) => {
+    const region = destination.region || 'Local area';
+    const current = grouped.get(region) || { ratingSum: 0, ratingCount: 0, reviewCount: 0, popularity: 0 };
+    const rating = Number(destination.rating || 0);
+    if (rating > 0) {
+      current.ratingSum += rating;
+      current.ratingCount += 1;
+    }
+    current.reviewCount += Number(destination.reviewCount || destination.liveVisitors || 0);
+    current.popularity += Number(destination.liveVisitors || destination.reviewCount || 0);
+    grouped.set(region, current);
+  });
+
+  return Array.from(grouped.entries()).reduce((acc, [region, value]) => {
+    acc[region] = {
+      rating: value.ratingCount ? value.ratingSum / value.ratingCount : 0,
+      reviewCount: value.reviewCount,
+      popularity: value.popularity
+    };
+    return acc;
+  }, {});
+}
+
+function statsForPlan(plan, regionStats) {
+  const tokens = [plan.destinationRegion, plan.destinationName]
+    .join(' ')
+    .split(/[·,/]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const matched = tokens.map((token) => regionStats[token]).filter(Boolean);
+  if (!matched.length) {
+    return { rating: 0, reviewCount: 0, popularity: 0 };
+  }
+  return {
+    rating: matched.reduce((sum, item) => sum + item.rating, 0) / matched.length,
+    reviewCount: matched.reduce((sum, item) => sum + item.reviewCount, 0),
+    popularity: matched.reduce((sum, item) => sum + item.popularity, 0)
+  };
+}
+
+function sortPlans(plans, regionStats, sortMode) {
+  return plans
+    .map((plan) => ({ plan, stats: statsForPlan(plan, regionStats) }))
+    .sort((left, right) => {
+      if (sortMode === 'rating') {
+        return right.stats.rating - left.stats.rating || right.stats.reviewCount - left.stats.reviewCount;
+      }
+      if (sortMode === 'reviews') {
+        return right.stats.reviewCount - left.stats.reviewCount || right.stats.rating - left.stats.rating;
+      }
+      if (sortMode === 'latest') {
+        return new Date(right.plan.createdAt || 0) - new Date(left.plan.createdAt || 0);
+      }
+      return (right.stats.rating * 1000 + right.stats.reviewCount)
+        - (left.stats.rating * 1000 + left.stats.reviewCount);
+    });
+}
+
 function routeClick(event, to, navigate) {
   if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) {
     return;
@@ -291,8 +422,7 @@ function LocalTripNav({ path, navigate }) {
   const items = [
     { label: 'Destinations', to: '/destinations' },
     { label: 'Planner', to: '/planner' },
-    { label: 'Plans', to: '/plans' },
-    { label: 'Analysis', to: '/analysis' }
+    { label: 'Plans', to: '/plans' }
   ];
 
   return (
@@ -341,6 +471,7 @@ function DestinationCard({ destination, compact = false, navigate }) {
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
               </svg>
               {destination.rating.toFixed(1)}
+              {destination.reviewCount ? <small>({formatNumber(destination.reviewCount)})</small> : null}
             </strong>
           ) : null}
         </div>
@@ -363,7 +494,7 @@ function DestinationCard({ destination, compact = false, navigate }) {
   );
 }
 
-function PlanCard({ plan, navigate }) {
+function PlanCard({ plan, navigate, stats }) {
   const content = (
     <>
       <div className="ltCardTopline">
@@ -376,6 +507,8 @@ function PlanCard({ plan, navigate }) {
         <span>{plan.days} days</span>
         <span>{formatDate(plan.startDate)}</span>
         <span>{plan.pace}</span>
+        {stats?.rating ? <span>★ {stats.rating.toFixed(1)}</span> : null}
+        {stats?.reviewCount ? <span>후기 {formatNumber(stats.reviewCount)}</span> : null}
       </div>
     </>
   );
@@ -409,6 +542,7 @@ function HomePage({ navigate }) {
   const { destinations, loading, error, usingFallback } = useDestinations();
   const { plans, loading: plansLoading } = usePlans(3);
   const topDestinations = destinations.slice(0, 3);
+  const heroImages = topDestinations.length ? topDestinations : FALLBACK_DESTINATIONS;
 
   return (
     <main className="ltPage">
@@ -428,18 +562,29 @@ function HomePage({ navigate }) {
             <a href="/destinations" onClick={(event) => routeClick(event, '/destinations', navigate)}>Browse Places</a>
           </div>
         </div>
-        <div className="ltHeroPanel">
-          <div>
-            <span>Active Destinations</span>
-            <strong>{loading ? '-' : formatNumber(destinations.length)}</strong>
+        <div className="ltHeroVisual">
+          <div className="ltHeroImage main" style={{ backgroundImage: `url("${heroImages[0]?.imageUrl || DEFAULT_IMAGES[0]}")` }}>
+            <span>{heroImages[0]?.region || 'Local'}</span>
           </div>
-          <div>
-            <span>Community Plans</span>
-            <strong>{plansLoading ? '-' : formatNumber(plans.length)}</strong>
+          <div className="ltHeroImage" style={{ backgroundImage: `url("${heroImages[1]?.imageUrl || DEFAULT_IMAGES[1]}")` }}>
+            <span>{heroImages[1]?.region || 'Local'}</span>
           </div>
-          <div>
-            <span>AI Efficiency</span>
-            <strong>100%</strong>
+          <div className="ltHeroImage" style={{ backgroundImage: `url("${heroImages[2]?.imageUrl || DEFAULT_IMAGES[2]}")` }}>
+            <span>{heroImages[2]?.region || 'Local'}</span>
+          </div>
+          <div className="ltHeroPanel">
+            <div>
+              <span>Active Destinations</span>
+              <strong>{loading ? '-' : formatNumber(destinations.length)}</strong>
+            </div>
+            <div>
+              <span>Saved Plans</span>
+              <strong>{plansLoading ? '-' : formatNumber(plans.length)}</strong>
+            </div>
+            <div>
+              <span>Top Region</span>
+              <strong>{heroImages[0]?.region || '-'}</strong>
+            </div>
           </div>
         </div>
       </section>
@@ -645,6 +790,12 @@ function PlannerPage({ path, navigate }) {
     setGenerating(true);
     setGenerateError('');
     setGeneratedPlan(null);
+    const session = readStoredAuth();
+    if (!session?.token) {
+      setGenerateError('로그인 세션이 없습니다. /analysisadmin에서 로그인하고 Gemini를 연결한 뒤 다시 생성하세요.');
+      setGenerating(false);
+      return;
+    }
 
     const selectedDestObjects = destinations.filter(d => selectedDestinationIds.includes(d.id));
     const regions = [...new Set(selectedDestObjects.map(d => d.region))];
@@ -841,6 +992,10 @@ function PlannerPage({ path, navigate }) {
 
 function PlansPage({ navigate }) {
   const { plans, loading, error, reload } = usePlans();
+  const { destinations } = useDestinations();
+  const [sortMode, setSortMode] = useState('recommended');
+  const regionStats = useMemo(() => buildRegionStats(destinations), [destinations]);
+  const sortedPlans = useMemo(() => sortPlans(plans, regionStats, sortMode), [plans, regionStats, sortMode]);
 
   return (
     <main className="ltPage">
@@ -849,14 +1004,22 @@ function PlansPage({ navigate }) {
           <span className="ltEyebrow">Plans</span>
           <h1>Saved itineraries</h1>
         </div>
-        <button type="button" className="ltSecondaryButton" onClick={reload}>Refresh</button>
+        <div className="ltPageActions">
+          <div className="ltSegmented compact" aria-label="일정 정렬">
+            <button type="button" className={sortMode === 'recommended' ? 'active' : ''} onClick={() => setSortMode('recommended')}>추천순</button>
+            <button type="button" className={sortMode === 'rating' ? 'active' : ''} onClick={() => setSortMode('rating')}>평점순</button>
+            <button type="button" className={sortMode === 'reviews' ? 'active' : ''} onClick={() => setSortMode('reviews')}>후기순</button>
+            <button type="button" className={sortMode === 'latest' ? 'active' : ''} onClick={() => setSortMode('latest')}>최신순</button>
+          </div>
+          <button type="button" className="ltSecondaryButton" onClick={reload}>Refresh</button>
+        </div>
       </section>
 
       {error ? <div className="ltInlineNotice error"><strong>Request failed</strong><span>{error}</span></div> : null}
       {loading ? <div className="ltEmptyState">Loading travel plans.</div> : null}
       {!loading && !plans.length ? <div className="ltEmptyState">No saved travel plans yet.</div> : null}
       <div className="ltPlansGrid">
-        {plans.map((plan) => <PlanCard key={plan.key} plan={plan} navigate={navigate} />)}
+        {sortedPlans.map(({ plan, stats }) => <PlanCard key={plan.key} plan={plan} stats={stats} navigate={navigate} />)}
       </div>
     </main>
   );
@@ -1044,7 +1207,7 @@ export default function LocalTripApp({ path, navigate }) {
       {page}
       <footer className="ltFooter">
         <span>LocalTrip AI</span>
-        <a href="/analysis" onClick={(event) => routeClick(event, '/analysis', navigate)}>Jupiter analysis workspace</a>
+        <span>Route planning for local travel</span>
       </footer>
     </div>
   );

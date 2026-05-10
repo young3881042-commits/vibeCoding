@@ -243,6 +243,10 @@ public class ChatCredentialService {
         return tryResolveGeminiAccessToken("admin");
     }
 
+    public Optional<String> resolveUserGeminiAuthorization(String username) {
+        return tryResolveGeminiAccessToken(username);
+    }
+
     public boolean isGeminiOauthConfigured() {
         return appProperties.geminiOauthClientId() != null
                 && !appProperties.geminiOauthClientId().isBlank()
