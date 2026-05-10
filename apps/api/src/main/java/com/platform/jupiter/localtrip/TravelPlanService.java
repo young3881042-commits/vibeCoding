@@ -19,6 +19,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class TravelPlanService {
+    private static final List<String> TIME_SLOTS = List.of("오전", "점심", "오후");
+
     private final TravelPlanRepository travelPlanRepository;
     private final TravelPlanItemRepository travelPlanItemRepository;
     private final LocalTripDestinationService destinationService;
@@ -202,21 +204,6 @@ public class TravelPlanService {
         }
         travelPlanItemRepository.deleteByTravelPlanId(id);
         travelPlanRepository.deleteById(id);
-    }
-
-    private TravelPlanItem createItem(Long travelPlanId, int day, int sequence, Destination destination) {
-        TravelPlanItem item = new TravelPlanItem();
-        item.setTravelPlanId(travelPlanId);
-        item.setDestinationId(destination.getId());
-        item.setDayNumber(day);
-        item.setSequenceNumber(sequence);
-        item.setTimeSlot(TIME_SLOTS.get(sequence - 1));
-        item.setDestinationName(destination.getName());
-        item.setRegion(destination.getRegion());
-        item.setPrimaryStyle(destination.getPrimaryStyle());
-        item.setDurationMinutes(destination.getRecommendedMinutes());
-        item.setNote(destination.getHeadline());
-        return item;
     }
 
     private List<String> normalizeRegions(TravelPlanGenerateRequest request) {
