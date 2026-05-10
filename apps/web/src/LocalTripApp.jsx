@@ -588,6 +588,8 @@ function PlannerPage({ path, navigate }) {
   const params = new URLSearchParams(path.split('?')[1] || '');
   const initialDestination = params.get('destination') || '';
   const [selectedDestinationIds, setSelectedDestinationIds] = useState(initialDestination ? [initialDestination] : []);
+  const [destSearch, setDestSearch] = useState('');
+  const [showSuggestions, setShowDestSuggestions] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [days, setDays] = useState(3);
   const [travelers, setTravelers] = useState('커플');
@@ -608,7 +610,7 @@ function PlannerPage({ path, navigate }) {
   }, [initialDestination]);
 
   useEffect(() => {
-    if (selectedDestinationIds.length === 0 && destinations.length > 0) {
+    if (selectedDestinationIds.length === 0 && destinations.length > 0 && !initialDestination) {
       setSelectedDestinationIds([destinations[0].id]);
     }
   }, [destinations]);
@@ -620,6 +622,15 @@ function PlannerPage({ path, navigate }) {
         : [...current, id]
     ));
   };
+
+  const filteredSuggestions = useMemo(() => {
+    const query = destSearch.trim().toLowerCase();
+    if (!query) return [];
+    return destinations.filter(d => 
+      (d.name.toLowerCase().includes(query) || d.region.toLowerCase().includes(query)) &&
+      !selectedDestinationIds.includes(d.id)
+    ).slice(0, 8);
+  }, [destSearch, destinations, selectedDestinationIds]);
 
   const toggleInterest = (interest) => {
     setSelectedInterests((current) => (
@@ -678,19 +689,45 @@ function PlannerPage({ path, navigate }) {
 
       <section className="ltPlannerLayout">
         <form className="ltPlannerForm" onSubmit={submit}>
-          <div className="ltInterestGroup">
-            <span>Destinations (Multiple selection available)</span>
-            <div className="ltDestSelectionGrid">
-              {destinations.map((destination) => (
-                <button
-                  key={destination.id}
-                  type="button"
-                  className={`ltDestChip ${selectedDestinationIds.includes(destination.id) ? 'active' : ''}`}
-                  onClick={() => toggleDestination(destination.id)}
-                >
-                  <strong>{destination.name}</strong>
-                  <small>{destination.region}</small>
-                </button>
+          <div className="ltAutocompleteGroup">
+            <label>
+              <span>Destinations Search</span>
+              <div className="ltAutocompleteContainer">
+                <input 
+                  value={destSearch} 
+                  onChange={(e) => {
+                    setDestSearch(e.target.value);
+                    setShowDestSuggestions(true);
+                  }}
+                  onFocus={() => setShowDestSuggestions(true)}
+                  placeholder="지역 또는 장소 검색 (예: 경주, 서울, 제주...)" 
+                />
+                {showSuggestions && filteredSuggestions.length > 0 && (
+                  <div className="ltAutocompleteDropdown">
+                    {filteredSuggestions.map(d => (
+                      <button 
+                        key={d.id} 
+                        type="button" 
+                        onClick={() => {
+                          toggleDestination(d.id);
+                          setDestSearch('');
+                          setShowDestSuggestions(false);
+                        }}
+                      >
+                        <strong>{d.name}</strong>
+                        <span>{d.region}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </label>
+            <div className="ltSelectedTagRow">
+              {destinations.filter(d => selectedDestinationIds.includes(d.id)).map(d => (
+                <span key={d.id} className="ltSelectedTag">
+                  {d.name} ({d.region})
+                  <button type="button" onClick={() => toggleDestination(d.id)} aria-label="Remove">×</button>
+                </span>
               ))}
             </div>
           </div>
