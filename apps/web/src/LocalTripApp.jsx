@@ -592,6 +592,7 @@ function PlannerPage({ path, navigate }) {
   const [transportType, setTransportType] = useState('대중교통');
   const [pace, setPace] = useState('보통');
   const [budget, setBudget] = useState('보통');
+  const [exportFormat, setExportFormat] = useState('텍스트');
   const [selectedInterests, setSelectedInterests] = useState(['맛집', '역사']);
   const [notes, setNotes] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -635,6 +636,7 @@ function PlannerPage({ path, navigate }) {
       travelerType: travelers,
       pace,
       budgetLevel: budget,
+      exportFormat,
       memo: notes
     };
     try {
@@ -701,14 +703,24 @@ function PlannerPage({ path, navigate }) {
               </select>
             </label>
           </div>
-          <label>
-            <span>Transport</span>
-            <select value={transportType} onChange={(event) => setTransportType(event.target.value)}>
-              <option value="대중교통">대중교통</option>
-              <option value="자동차">자동차</option>
-              <option value="도보">도보</option>
-            </select>
-          </label>
+          <div className="ltFormGrid">
+            <label>
+              <span>Transport</span>
+              <select value={transportType} onChange={(event) => setTransportType(event.target.value)}>
+                <option value="대중교통">대중교통</option>
+                <option value="자동차">자동차</option>
+                <option value="도보">도보</option>
+              </select>
+            </label>
+            <label>
+              <span>Export Format</span>
+              <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value)}>
+                <option value="텍스트">텍스트</option>
+                <option value="엑셀">엑셀</option>
+                <option value="PDF">PDF</option>
+              </select>
+            </label>
+          </div>
           <label>
             <span>Budget</span>
             <select value={budget} onChange={(event) => setBudget(event.target.value)}>
