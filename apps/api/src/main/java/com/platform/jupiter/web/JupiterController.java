@@ -18,6 +18,8 @@ import com.platform.jupiter.chat.LocalChatService;
 import com.platform.jupiter.chat.OpenAiChatCompletionRequest;
 import com.platform.jupiter.chat.OpenAiChatCompletionResponse;
 import com.platform.jupiter.chat.SaveApiKeyRequest;
+import com.platform.jupiter.chat.ChatUsageResponse;
+import com.platform.jupiter.chat.ChatUsageService;
 import com.platform.jupiter.config.AppProperties;
 import com.platform.jupiter.foodshow.FoodShowAnalyticsService;
 import com.platform.jupiter.foodshow.FoodShowDashboardResponse;
@@ -83,6 +85,7 @@ public class JupiterController {
     private final VirusScanService virusScanService;
     private final ChatService chatService;
     private final ChatCredentialService chatCredentialService;
+    private final ChatUsageService chatUsageService;
     private final LocalChatService localChatService;
     private final NotebookService notebookService;
     private final FoodShowAnalyticsService foodShowAnalyticsService;
@@ -100,6 +103,7 @@ public class JupiterController {
             VirusScanService virusScanService,
             ChatService chatService,
             ChatCredentialService chatCredentialService,
+            ChatUsageService chatUsageService,
             LocalChatService localChatService,
             NotebookService notebookService,
             FoodShowAnalyticsService foodShowAnalyticsService,
@@ -115,6 +119,7 @@ public class JupiterController {
         this.virusScanService = virusScanService;
         this.chatService = chatService;
         this.chatCredentialService = chatCredentialService;
+        this.chatUsageService = chatUsageService;
         this.localChatService = localChatService;
         this.notebookService = notebookService;
         this.foodShowAnalyticsService = foodShowAnalyticsService;
@@ -280,6 +285,12 @@ public class JupiterController {
     public List<ChatProviderStatus> chatProviders(HttpServletRequest servletRequest) {
         AuthSession session = authService.requireSession(servletRequest);
         return chatCredentialService.listProviderStatuses(session.username());
+    }
+
+    @GetMapping("/chat/usage")
+    public ChatUsageResponse chatUsage(HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        return chatUsageService.usage(session.username());
     }
 
     @PostMapping("/chat/providers/openai")

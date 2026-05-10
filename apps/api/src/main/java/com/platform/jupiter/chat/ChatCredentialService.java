@@ -31,6 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class ChatCredentialService {
     private static final String PROVIDER_OPENAI = "openai";
     private static final String PROVIDER_GEMINI = "gemini";
+    public static final String DEFAULT_CODEX_MODEL = "gpt-5.5";
 
     private final JdbcTemplate jdbcTemplate;
     private final AppProperties appProperties;
@@ -86,12 +87,12 @@ public class ChatCredentialService {
         return List.of(
                 new ChatProviderStatus(
                         PROVIDER_OPENAI,
-                        "OpenAI",
+                        "OpenAI / Codex",
                         true,
                         openAiConnected || openAiServerConfigured,
                         openAiConnected ? "사용자 키가 서버에 저장되어 있습니다." : (openAiServerConfigured ? "서버 기본 OpenAI 키를 사용합니다." : "연결되지 않음"),
                         "https://api.openai.com",
-                        "gpt-4o-mini"),
+                        DEFAULT_CODEX_MODEL),
                 new ChatProviderStatus(
                         PROVIDER_GEMINI,
                         "Google Gemini",

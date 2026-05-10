@@ -92,7 +92,7 @@ function RagComposer({ loading, question, setQuestion, onSubmit }) {
         }}
       />
       <div className="assistantComposerBar">
-        <span>검색 결과를 Gemini로 넘겨 답변을 생성합니다.</span>
+        <span>검색 결과를 Codex로 넘겨 답변을 생성합니다.</span>
         <button type="submit" className="ragSendButton" disabled={loading}>
           {loading ? 'Searching' : 'Ask RAG'}
         </button>
@@ -117,6 +117,8 @@ export default function RagApp({
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState('');
+  const [ragStatus, setRagStatus] = useState(null);
+  const [documents, setDocuments] = useState([]);
   const scrollRef = useRef(null);
   const uploadRef = useRef(null);
   const saveEnabled = Boolean(authToken && persistToWorkspace);
@@ -130,7 +132,12 @@ export default function RagApp({
 
   const loadDocuments = async () => {
     try {
-      await api('/api/rag/weather', { token: authToken });
+      const [status, documentList] = await Promise.all([
+        api('/api/rag/weather', { token: authToken }),
+        api('/api/rag/documents', { token: authToken })
+      ]);
+      setRagStatus(status);
+      setDocuments(documentList || []);
       setMessage('');
     } catch (error) {
       setMessage(error.message);
@@ -298,6 +305,13 @@ export default function RagApp({
       >
         <header className="assistantHeader assistantHeaderMinimal">
           <code className="assistantPathPill">{contextPath}</code>
+          <div className="ragStatusStrip">
+            <span className={`statusPill ${ragStatus?.vectorStoreConfigured ? 'ok' : ''}`}>
+              {ragStatus?.vectorStoreConfigured ? 'Qdrant 연결됨' : 'Vector DB 미연결'}
+            </span>
+            <span className="statusPill">{ragStatus?.collectionName || 'collection 없음'}</span>
+            <span className="statusPill">{documents.length} docs</span>
+          </div>
           <div className="assistantHeaderActions">
             <button type="button" className="ghostButton compact" onClick={refreshWeather} disabled={loading || uploading}>
               Sync
@@ -317,8 +331,17 @@ export default function RagApp({
         <div className="assistantStream" ref={scrollRef}>
           {!turns.length ? (
             <section className="assistantEmpty">
-              <h2>Gemini 기반 RAG</h2>
+              <h2>Codex 기반 RAG</h2>
               <p>{suggestions[0]}</p>
+              <div className="ragDocumentPreview">
+                {documents.slice(0, 4).map((document) => (
+                  <article key={document.id}>
+                    <strong>{document.title}</strong>
+                    <span>{document.chunkCount} chunks · {document.filename}</span>
+                    <p>{document.preview}</p>
+                  </article>
+                ))}
+              </div>
             </section>
           ) : null}
           {turns.map((turn, index) => <RagMessage key={`${turn.role}-${index}`} turn={turn} />)}
@@ -326,7 +349,7 @@ export default function RagApp({
             <article className="assistantTurn assistant">
               <div className="assistantAvatar assistant">R</div>
               <div className="assistantBubble assistant loading">
-                <p>RAG 검색 결과를 Gemini로 정리하고 있습니다.</p>
+                <p>RAG 검색 결과를 Codex로 정리하고 있습니다.</p>
               </div>
             </article>
           ) : null}

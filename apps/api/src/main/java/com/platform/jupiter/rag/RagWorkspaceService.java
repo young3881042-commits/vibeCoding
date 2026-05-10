@@ -36,12 +36,12 @@ public class RagWorkspaceService {
 
     private final RagService ragService;
     private final FileService fileService;
-    private final GeminiRagService geminiRagService;
+    private final CodexRagService codexRagService;
 
-    public RagWorkspaceService(RagService ragService, FileService fileService, GeminiRagService geminiRagService) {
+    public RagWorkspaceService(RagService ragService, FileService fileService, CodexRagService codexRagService) {
         this.ragService = ragService;
         this.fileService = fileService;
-        this.geminiRagService = geminiRagService;
+        this.codexRagService = codexRagService;
     }
 
     public RagWorkspaceResponse answerAndSave(RagWorkspaceRequest request, String username, boolean admin) {
@@ -83,9 +83,9 @@ public class RagWorkspaceService {
         List<RagCitation> citations = mergeCitations(retrieval.citations(), workspaceContext.citations());
         try {
             String prompt = buildPrompt(question, retrieval.candidates(), workspaceContext);
-            String answer = geminiRagService.generate(prompt, username);
+            String answer = codexRagService.generate(prompt, username);
             if (answer.isBlank()) {
-                throw new IllegalStateException("empty gemini answer");
+                throw new IllegalStateException("empty codex answer");
             }
             return new RagAnswerResponse(question, answer, citations, Instant.now());
         } catch (Exception exception) {
@@ -100,7 +100,7 @@ public class RagWorkspaceService {
             if (!workspaceContext.citations().isEmpty()) {
                 return new RagAnswerResponse(
                         question,
-                        "선택한 워크스페이스 파일이나 폴더 문맥은 잡혔지만 Gemini 답변 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+                        "선택한 워크스페이스 파일이나 폴더 문맥은 잡혔지만 Codex 답변 생성에 실패했습니다. OpenAI API 키 설정을 확인하거나 잠시 후 다시 시도해 주세요.",
                         workspaceContext.citations(),
                         Instant.now());
             }
@@ -231,7 +231,7 @@ public class RagWorkspaceService {
 
     private String buildPrompt(String question, List<RagService.RagContextChunk> chunks, WorkspaceContext workspaceContext) {
         StringBuilder builder = new StringBuilder();
-        builder.append("You are a RAG assistant for a Korean portfolio workspace.\n");
+        builder.append("You are Codex acting as a RAG assistant for a Korean portfolio workspace.\n");
         builder.append("If the user asks what files or folders exist in the current path, answer from the current workspace selection directly and list them explicitly.\n");
         builder.append("Answer from the current workspace selection first when it is relevant.\n");
         builder.append("Then use indexed RAG context.\n");
@@ -277,7 +277,7 @@ public class RagWorkspaceService {
         }
 
         List<String> lines = new ArrayList<>();
-        lines.add("현재 서버에서 Gemini가 연결되지 않아 로컬 RAG 결과로 정리했습니다.");
+        lines.add("현재 서버에서 Codex가 연결되지 않아 로컬 RAG 결과로 정리했습니다.");
         lines.add("질문: " + question.trim());
 
         if (!workspaceContext.items().isEmpty()) {

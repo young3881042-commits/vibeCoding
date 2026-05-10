@@ -3,6 +3,7 @@ package com.platform.jupiter.terminal;
 import com.platform.jupiter.config.AppProperties;
 import com.platform.jupiter.auth.AuthService;
 import com.platform.jupiter.auth.AuthSession;
+import com.platform.jupiter.chat.ChatCredentialService;
 import com.platform.jupiter.files.FileService;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -28,6 +29,7 @@ public class TerminalWebSocketHandler extends TextWebSocketHandler {
     private final AppProperties appProperties;
     private final KubernetesClient kubernetesClient;
     private final AuthService authService;
+    private final ChatCredentialService chatCredentialService;
     private final FileService fileService;
     private final Map<String, TerminalProcess> terminals = new ConcurrentHashMap<>();
 
@@ -35,10 +37,12 @@ public class TerminalWebSocketHandler extends TextWebSocketHandler {
             AppProperties appProperties,
             KubernetesClient kubernetesClient,
             AuthService authService,
+            ChatCredentialService chatCredentialService,
             FileService fileService) {
         this.appProperties = appProperties;
         this.kubernetesClient = kubernetesClient;
         this.authService = authService;
+        this.chatCredentialService = chatCredentialService;
         this.fileService = fileService;
     }
 
@@ -56,7 +60,7 @@ public class TerminalWebSocketHandler extends TextWebSocketHandler {
             String tool = normalizeTool(params.get("tool"));
             Path workspaceRoot = fileService.workspaceRootPath(authSession.username(), authSession.admin());
             Path workspaceHome = fileService.workspaceHomePath(authSession.username(), authSession.admin());
-            TerminalProcess terminal = startTerminalProcess(session, tool, workspaceRoot, workspaceHome);
+            TerminalProcess terminal = startTerminalProcess(session, tool, authSession.username(), workspaceRoot, workspaceHome);
             terminals.put(session.getId(), terminal);
             send(session, """
                     Connected to %s
@@ -135,17 +139,18 @@ public class TerminalWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private TerminalProcess startTerminalProcess(WebSocketSession session, String tool, Path workspaceRoot, Path workspaceHome) throws IOException {
+    private TerminalProcess startTerminalProcess(WebSocketSession session, String tool, String username, Path workspaceRoot, Path workspaceHome) throws IOException {
         String command = "exec sh -il";
         if ("gemini".equals(tool)) {
             command = "printf %s " + shellQuote(geminiBrowserBanner()) + " && exec sh -il";
         } else if ("codex".equals(tool)) {
-            command = "exec /opt/jupiter-cli/bin/codex";
+            command = buildCodexCommand();
         }
 
         String shellCommand = "cd " + shellQuote(workspaceRoot.toString())
                 + " && export HOME=" + shellQuote(workspaceHome.toString())
                 + " TERM=xterm-256color PATH=\"$PATH:/usr/local/bin:/usr/bin:/opt/jupiter-cli/bin\""
+                + ("codex".equals(tool) ? codexSessionEnvironment(username) : "")
                 + " && " + buildCliBootstrap(workspaceHome)
                 + command;
 
@@ -184,6 +189,22 @@ public class TerminalWebSocketHandler extends TextWebSocketHandler {
 
     private String shellQuote(String value) {
         return "'" + value.replace("'", "'\"'\"'") + "'";
+    }
+
+    private String buildCodexCommand() {
+        return """
+                if [ ! -x /opt/jupiter-cli/bin/codex ]; then
+                  echo 'Codex CLI is not installed in jupiter-cli pod. Install @openai/codex or restart the cli pod with npm access.'
+                  exec sh -il
+                fi
+                exec /opt/jupiter-cli/bin/codex -m %s
+                """.formatted(shellQuote(ChatCredentialService.DEFAULT_CODEX_MODEL));
+    }
+
+    private String codexSessionEnvironment(String username) {
+        return chatCredentialService.resolveOpenAiApiKey(username)
+                .map(apiKey -> " OPENAI_API_KEY=" + shellQuote(apiKey) + " CODEX_MODEL=" + shellQuote(ChatCredentialService.DEFAULT_CODEX_MODEL))
+                .orElse("");
     }
 
     private String buildCliBootstrap(Path workspaceHome) {

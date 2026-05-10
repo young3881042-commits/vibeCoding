@@ -45,21 +45,21 @@ public class RagService {
     private final RagEmbeddingService ragEmbeddingService;
     private final VectorStoreService vectorStoreService;
     private final WeatherRagService weatherRagService;
-    private final GeminiRagService geminiRagService;
+    private final CodexRagService codexRagService;
 
     public RagService(
             AppProperties appProperties,
             RagEmbeddingService ragEmbeddingService,
             VectorStoreService vectorStoreService,
             WeatherRagService weatherRagService,
-            GeminiRagService geminiRagService) {
+            CodexRagService codexRagService) {
         this.ragRoot = Path.of(appProperties.ragRoot());
         this.sourceRoot = Path.of(appProperties.ragSourceRoot());
         this.documentsRoot = ragRoot.resolve("documents");
         this.ragEmbeddingService = ragEmbeddingService;
         this.vectorStoreService = vectorStoreService;
         this.weatherRagService = weatherRagService;
-        this.geminiRagService = geminiRagService;
+        this.codexRagService = codexRagService;
     }
 
     @PostConstruct
@@ -131,12 +131,12 @@ public class RagService {
         RagRetrievalResult retrieval = retrieve(request);
         if (username != null && !username.isBlank()) {
             try {
-                String answer = geminiRagService.generate(buildPrompt(request.question(), retrieval.candidates()), username);
+                String answer = codexRagService.generate(buildPrompt(request.question(), retrieval.candidates()), username);
                 if (!answer.isBlank()) {
                     return new RagAnswerResponse(request.question(), answer, retrieval.citations(), Instant.now());
                 }
             } catch (Exception exception) {
-                log.warn("Gemini RAG answer failed for {}: {}", username, exception.getMessage());
+                log.warn("Codex RAG answer failed for {}: {}", username, exception.getMessage());
             }
         }
         if (retrieval.candidates().isEmpty()) {
@@ -386,7 +386,7 @@ public class RagService {
 
     private String buildPrompt(String question, List<RagContextChunk> chunks) {
         StringBuilder builder = new StringBuilder();
-        builder.append("You are a concise Korean RAG assistant.\n");
+        builder.append("You are Codex acting as a concise Korean RAG assistant.\n");
         builder.append("Answer only from the provided retrieved context when possible.\n");
         builder.append("If the retrieved context is insufficient, clearly say what is missing and keep the answer cautious.\n");
         builder.append("When weather context is present, prefer the latest weather facts from context.\n");

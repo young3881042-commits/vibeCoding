@@ -2237,6 +2237,47 @@ body {
   background: rgba(0, 137, 123, 0.15);
 }
 
+.ragStatusStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ragDocumentPreview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 14px;
+}
+
+.ragDocumentPreview article {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: left;
+}
+
+.ragDocumentPreview strong {
+  color: var(--ink);
+}
+
+.ragDocumentPreview span,
+.ragDocumentPreview p {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.ragDocumentPreview p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .monitorStatTile.memory::after {
   background: rgba(245, 158, 11, 0.16);
 }
@@ -2433,6 +2474,10 @@ body {
   .monitorCardHeader,
   .nodeUsageTitle {
     flex-direction: column;
+  }
+
+  .ragDocumentPreview {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2689,5 +2734,1011 @@ body {
   .accountDialogFooter {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+/* Product layout refinements */
+.workspaceBrowserShell {
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 20px;
+  padding: 22px;
+}
+
+.workspaceTopbar {
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.workspacePathCard {
+  padding: 16px 18px;
+}
+
+.workspacePathCode {
+  min-height: 38px;
+  font-size: 0.88rem;
+}
+
+.workspaceTopTabs {
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.workspaceTopTabs .ghostButton.compact {
+  padding: 10px 14px;
+  border-radius: 13px;
+}
+
+.browserListPanel,
+.browserPreviewPanel,
+.assistantPanel {
+  border-radius: 26px;
+}
+
+.browserListPanel {
+  padding: 18px;
+  gap: 14px;
+}
+
+.entryList {
+  gap: 8px;
+}
+
+.entryRow {
+  min-height: 54px;
+  border-radius: 16px;
+}
+
+.rightPanelStack {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.panelVisible,
+.panelVisible > * {
+  min-height: 0;
+  height: 100%;
+}
+
+.ragPanel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.llmPanel {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+}
+
+.assistantHeaderMinimal {
+  gap: 14px;
+}
+
+.assistantPathPill {
+  min-width: 220px;
+  max-width: 46%;
+}
+
+.assistantStream {
+  min-height: 0;
+  padding-right: 6px;
+}
+
+.assistantEmpty {
+  min-height: 280px;
+  padding: 34px;
+}
+
+.assistantComposer {
+  padding: 14px;
+}
+
+.assistantComposer textarea {
+  min-height: 92px;
+}
+
+.llmControlPanel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.96), rgba(255, 255, 255, 0.9));
+}
+
+.llmProviderGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.llmProviderButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: #ffffff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.llmProviderButton.active {
+  border-color: rgba(49, 130, 246, 0.24);
+  background: #edf5ff;
+  color: #1d4f9c;
+}
+
+.llmProviderButton:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+
+.llmProviderButton span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.llmSettingsRow {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.llmSettingsRow label {
+  display: grid;
+  gap: 7px;
+}
+
+.llmSettingsRow label span,
+.llmProviderMessage {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.llmSettingsRow input,
+.llmKeyForm input {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8fbff;
+  color: var(--ink);
+}
+
+.llmKeyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.llmKeyForm {
+  min-width: min(100%, 420px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.llmUsageGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.llmUsageCard {
+  display: grid;
+  gap: 6px;
+  min-height: 112px;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.llmUsageCard.primary {
+  background:
+    radial-gradient(circle at top right, rgba(49, 130, 246, 0.12), transparent 42%),
+    #ffffff;
+}
+
+.llmUsageCard span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.llmUsageCard strong {
+  color: var(--ink);
+  font-size: 1.8rem;
+  letter-spacing: -0.05em;
+}
+
+.llmUsageCard small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.llmEmpty h2,
+.assistantEmpty h2 {
+  color: var(--ink);
+  font-size: 1.35rem;
+  letter-spacing: -0.04em;
+}
+
+@media (max-width: 1280px) {
+  .workspaceBrowserShell,
+  .workspaceTopbar {
+    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  }
+
+  .assistantPathPill {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 980px) {
+  .workspaceBrowserShell,
+  .workspaceTopbar {
+    grid-template-columns: 1fr;
+  }
+
+  .llmSettingsRow,
+  .llmUsageGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .llmKeyActions,
+  .assistantHeaderActions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  .workspaceBrowserShell {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .llmProviderGrid,
+  .llmKeyForm {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* LocalTrip AI */
+.ltShell {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, #f8fafc 0%, #eef4f7 52%, #f8fafc 100%);
+  color: #1f2933;
+}
+
+.ltShell a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ltShell button,
+.ltShell input,
+.ltShell select,
+.ltShell textarea {
+  font: inherit;
+}
+
+.ltNav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: min(1180px, calc(100% - 32px));
+  min-height: 72px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border-bottom: 1px solid #dbe4ea;
+  background: rgba(248, 250, 252, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.ltBrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #111827;
+  font-weight: 900;
+}
+
+.ltBrand span,
+.ltBrand strong {
+  letter-spacing: 0;
+}
+
+.ltBrand strong {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 0.78rem;
+}
+
+.ltNavLinks {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ltNavLinks a,
+.ltNavAction,
+.ltHeroActions a,
+.ltPrimaryButton,
+.ltSecondaryButton,
+.ltTextButton,
+.ltBackButton,
+.ltPlannerTeaser button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 800;
+}
+
+.ltNavLinks a {
+  color: #52606d;
+}
+
+.ltNavLinks a.active {
+  background: #ffffff;
+  border-color: #dbe4ea;
+  color: #0f766e;
+}
+
+.ltNavAction,
+.ltPrimaryButton,
+.ltHeroActions a:first-child,
+.ltPlannerTeaser button {
+  background: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 14px 28px rgba(15, 118, 110, 0.18);
+}
+
+.ltPrimaryButton:disabled,
+.ltSecondaryButton:disabled {
+  opacity: 0.56;
+  cursor: wait;
+}
+
+.ltPage {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 42px 0 56px;
+}
+
+.ltHero {
+  min-height: 520px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.78fr);
+  gap: 28px;
+  align-items: center;
+}
+
+.ltHeroCopy {
+  display: grid;
+  gap: 22px;
+  align-content: center;
+}
+
+.ltEyebrow {
+  color: #0f766e;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.ltHeroCopy h1,
+.ltPageTitle h1,
+.ltPlanHero h1 {
+  max-width: 760px;
+  color: #111827;
+  font-size: clamp(2.2rem, 7vw, 5.8rem);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.ltHeroCopy p {
+  max-width: 620px;
+  color: #52606d;
+  font-size: 1.08rem;
+  line-height: 1.7;
+}
+
+.ltHeroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ltHeroActions a:last-child,
+.ltSecondaryButton,
+.ltBackButton {
+  background: #ffffff;
+  border-color: #dbe4ea;
+  color: #1f2933;
+}
+
+.ltHeroPanel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #dbe4ea;
+  border-radius: 8px;
+  background: #dbe4ea;
+  box-shadow: 0 24px 50px rgba(31, 41, 51, 0.08);
+}
+
+.ltHeroPanel div {
+  display: grid;
+  gap: 8px;
+  min-height: 128px;
+  padding: 22px;
+  background: #ffffff;
+}
+
+.ltHeroPanel span,
+.ltCardTopline span,
+.ltPlanMeta span,
+.ltDestinationBody p,
+.ltPlanCard p,
+.ltPlannerTeaser p,
+.ltTimelineItem p,
+.ltTimelineItem span,
+.ltFooter,
+.ltEmptyState,
+.ltInlineNotice span,
+.ltFilterBar label span,
+.ltPlannerForm label span,
+.ltInterestGroup > span {
+  color: #52606d;
+}
+
+.ltHeroPanel strong {
+  color: #111827;
+  font-size: 2rem;
+  letter-spacing: 0;
+}
+
+.ltInlineNotice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  padding: 13px 14px;
+  border: 1px solid #c8e1df;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #0f766e;
+}
+
+.ltInlineNotice.error {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.ltInlineNotice strong {
+  flex: none;
+}
+
+.ltSectionHeader,
+.ltPageTitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.ltSectionHeader.compact {
+  margin-bottom: 0;
+}
+
+.ltSectionHeader h2,
+.ltPlannerTeaser h2,
+.ltGeneratedPreview h2,
+.ltPlanHero h1,
+.ltTimelineDayHeader h2,
+.ltRecentPlans h2 {
+  color: #111827;
+  letter-spacing: 0;
+}
+
+.ltSectionHeader h2,
+.ltPlannerTeaser h2,
+.ltGeneratedPreview h2 {
+  font-size: 1.7rem;
+  line-height: 1.18;
+}
+
+.ltSectionHeader a,
+.ltTextButton {
+  color: #0f766e;
+  font-weight: 900;
+}
+
+.ltDestinationGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ltDestinationCard,
+.ltPlanCard,
+.ltPlannerForm,
+.ltPlannerPreview,
+.ltPlannerTeaser,
+.ltRecentPlans,
+.ltPlanHero,
+.ltTimelineDay,
+.ltEmptyState.large {
+  border: 1px solid #dbe4ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 16px 34px rgba(31, 41, 51, 0.07);
+}
+
+.ltDestinationCard {
+  overflow: hidden;
+}
+
+.ltDestinationPhoto {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background-color: #dbe4ea;
+  background-position: center;
+  background-size: cover;
+}
+
+.ltDestinationPhoto::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.02), rgba(17, 24, 39, 0.46));
+}
+
+.ltDestinationPhoto span {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111827;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.ltDestinationBody,
+.ltPlanCard,
+.ltPlannerTeaser,
+.ltRecentPlans,
+.ltPlannerForm,
+.ltPlannerPreview,
+.ltPlanHero {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.ltDestinationBody h3,
+.ltPlanCard h3,
+.ltTimelineItem h3 {
+  color: #111827;
+  font-size: 1.1rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.ltDestinationBody p,
+.ltPlanCard p,
+.ltPlannerTeaser p,
+.ltTimelineItem p {
+  line-height: 1.62;
+}
+
+.ltCardTopline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.ltCardTopline strong {
+  color: #e11d48;
+}
+
+.ltTagRow,
+.ltPlanMeta,
+.ltPlanFacts,
+.ltSegmented,
+.ltInterestGroup div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ltTagRow span,
+.ltPlanMeta span,
+.ltPlanFacts span,
+.ltSegmented button,
+.ltInterestGroup button {
+  border: 1px solid #dbe4ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 7px 9px;
+  color: #52606d;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.ltTagRow.small span {
+  padding: 5px 8px;
+  font-size: 0.76rem;
+}
+
+.ltTextButton {
+  justify-self: start;
+  min-height: auto;
+  padding: 0;
+}
+
+.ltSplitSection {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 16px;
+  margin-top: 34px;
+}
+
+.ltPlannerTeaser {
+  align-content: start;
+  min-height: 300px;
+  background: linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%);
+}
+
+.ltPlannerTeaser button {
+  justify-self: start;
+}
+
+.ltRecentPlans {
+  align-content: start;
+}
+
+.ltPlansGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ltPlanCard {
+  color: inherit;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ltPlanCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 38px rgba(31, 41, 51, 0.11);
+}
+
+.ltPageTitle {
+  align-items: center;
+}
+
+.ltPageTitle h1 {
+  font-size: clamp(2rem, 5vw, 4.2rem);
+}
+
+.ltFilterBar {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid #dbe4ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ltFilterBar label,
+.ltPlannerForm label,
+.ltInterestGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.ltFilterBar input,
+.ltPlannerForm input,
+.ltPlannerForm select,
+.ltPlannerForm textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dbe4ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+  padding: 12px 13px;
+}
+
+.ltPlannerForm textarea {
+  min-height: 116px;
+  resize: vertical;
+}
+
+.ltSegmented button.active,
+.ltInterestGroup button.active {
+  border-color: #99f6e4;
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.ltPlannerLayout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.ltFormGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ltPlannerPreview {
+  position: sticky;
+  top: 92px;
+}
+
+.ltDestinationCard.compact {
+  box-shadow: none;
+}
+
+.ltDestinationCard.compact .ltDestinationBody {
+  padding: 16px;
+}
+
+.ltGeneratedPreview {
+  display: grid;
+  gap: 14px;
+}
+
+.ltPlanHero {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  margin-bottom: 18px;
+  padding: 24px;
+}
+
+.ltPlanHero p {
+  max-width: 760px;
+  color: #52606d;
+  line-height: 1.7;
+}
+
+.ltTimeline {
+  display: grid;
+  gap: 16px;
+}
+
+.ltTimelineDay {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 18px;
+  padding: 20px;
+}
+
+.ltTimelineDayHeader {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.ltTimelineDayHeader span {
+  display: inline-flex;
+  width: fit-content;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.ltTimelineItems {
+  position: relative;
+  display: grid;
+  gap: 12px;
+}
+
+.ltTimelineItems::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 92px;
+  width: 2px;
+  background: #dbe4ea;
+}
+
+.ltTimelineItem {
+  position: relative;
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 26px;
+}
+
+.ltTimelineItem::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 86px;
+  width: 14px;
+  height: 14px;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: #e11d48;
+  box-shadow: 0 0 0 1px #fecdd3;
+}
+
+.ltTimelineItem time {
+  color: #0f766e;
+  font-weight: 900;
+}
+
+.ltTimelineItem > div {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid #dbe4ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.ltBackButton {
+  margin-bottom: 18px;
+}
+
+.ltEmptyState {
+  padding: 18px;
+  border: 1px dashed #cbd5df;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.64);
+  text-align: center;
+}
+
+.ltEmptyState.large {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  gap: 16px;
+}
+
+.ltFooter {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 0 36px;
+  border-top: 1px solid #dbe4ea;
+}
+
+.ltFooter a {
+  color: #0f766e;
+  font-weight: 900;
+}
+
+@media (max-width: 1040px) {
+  .ltHero,
+  .ltSplitSection,
+  .ltPlannerLayout,
+  .ltPlanHero {
+    grid-template-columns: 1fr;
+  }
+
+  .ltDestinationGrid,
+  .ltPlansGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ltPlannerPreview {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .ltNav {
+    width: min(100% - 24px, 1180px);
+    grid-template-columns: 1fr auto;
+    padding: 12px 0;
+  }
+
+  .ltNavLinks {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .ltNavAction {
+    justify-self: end;
+  }
+
+  .ltPage,
+  .ltFooter {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .ltHero {
+    min-height: auto;
+    padding-top: 18px;
+  }
+
+  .ltHeroCopy h1,
+  .ltPageTitle h1,
+  .ltPlanHero h1 {
+    font-size: clamp(2rem, 12vw, 3.8rem);
+  }
+
+  .ltDestinationGrid,
+  .ltPlansGrid,
+  .ltFormGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .ltSectionHeader,
+  .ltPageTitle,
+  .ltFooter,
+  .ltInlineNotice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ltTimelineDay {
+    grid-template-columns: 1fr;
+  }
+
+  .ltTimelineItems::before {
+    left: 6px;
+  }
+
+  .ltTimelineItem {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding-left: 28px;
+  }
+
+  .ltTimelineItem::before {
+    left: 0;
   }
 }

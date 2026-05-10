@@ -103,6 +103,135 @@ Jupiter Workspace는 분석 업무용 웹 UI, API, DB, 실행 인프라를 한 �
 ├── docs
 ├── scripts
 └── README.md
+```
+
+---
+
+## LocalTrip AI
+
+LocalTrip AI는 한국관광공사 TourAPI 연동을 준비한 국내 여행 일정 생성 MVP입니다. 기존 분석 워크스페이스는 `/analysis`에 유지하고, 웹 루트 `/`에는 LocalTrip AI를 배치했습니다.
+
+### 프로젝트 개요
+
+- 사용자가 지역, 기간, 이동수단, 여행 스타일, 예산, 메모를 입력한다.
+- Mock 또는 TourAPI 기반 여행지 데이터를 조회한다.
+- 초기 버전은 DB 여행지 데이터를 조합해 AI 일정처럼 응답한다.
+- 실제 외부 API 키 없이도 Mock 데이터로 전체 화면과 API가 동작한다.
+
+### 주요 기능
+
+- 여행지 목록 조회: 지역, 스타일, 키워드 필터
+- Mock 여행지 동기화: 서울, 경주, 부산, 제주 24건
+- AI 일정 생성 Mock: 여행 스타일과 지역 조건 기반 일정 저장
+- 저장된 일정 목록/상세/삭제
+- TourAPI 연동 준비: base URL과 service key는 설정값으로 분리
+- 분석 데이터 수집 볼륨: `/workspace-data/analysis/localtrip`
+
+### 기술 스택
+
+- Web: React, Vite
+- API: Spring Boot, JDBC/JPA 기반 Repository
+- DB: MariaDB
+- Deploy: 기존 Kubernetes 소스 기반 배포 유지
+- Collection: Bash 초기화 스크립트, Python TourAPI collector
+
+### 현재 실행 주소
+
+- LocalTrip AI Web: `http://192.168.45.101:31088/`
+- 기존 Jupiter 분석 워크스페이스: `http://192.168.45.101:31088/analysis`
+- API NodePort: `http://192.168.45.101:31090`
+
+### 실행 방법
+
+전체 소스 기반 재배포:
+
+```bash
+/root/scripts/deploy_jupiter_from_source.sh
+```
+
+Web 소스만 빠르게 반영:
+
+```bash
+/root/scripts/sync_web_source_to_pod.sh
+```
+
+Mock 여행지 데이터 적재:
+
+```bash
+curl -fsS -X POST http://192.168.45.101:31090/api/destinations/sync/mock
+```
+
+여행지 검색:
+
+```bash
+curl -fsS --get \
+  --data-urlencode region=경주 \
+  --data-urlencode style=역사 \
+  --data-urlencode size=3 \
+  http://192.168.45.101:31090/api/destinations
+```
+
+일정 생성:
+
+```bash
+curl -fsS -X POST http://192.168.45.101:31090/api/travel-plans/generate \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"region":"경주","days":2,"transportType":"PUBLIC_TRANSPORT","travelStyle":["역사","맛집","사진"],"budgetLevel":"NORMAL","memo":"첨성대 야경을 보고 싶다."}'
+```
+
+### API 목록
+
+- `GET /api/destinations`
+- `GET /api/destinations/{id}`
+- `POST /api/destinations/sync/mock`
+- `POST /api/travel-plans/generate`
+- `GET /api/travel-plans`
+- `GET /api/travel-plans/{id}`
+- `DELETE /api/travel-plans/{id}`
+
+### 데이터 동기화 구조
+
+TourAPI 설정은 `application.yml`의 `app.tour-api` 아래에서 관리합니다. 실제 키는 커밋하지 않고 `APP_TOUR_API_SERVICE_KEY` 또는 환경별 secret으로 주입합니다.
+
+RAG 코퍼스는 분석 볼륨의 `04_rag`에 지역/섹터/페르소나 순서로 둡니다.
+
+```text
+/workspace-data/analysis/localtrip/04_rag/
+  regions/
+    gyeongju/
+      food/
+        couple/
+        family/
+      attractions/
+      activities/
+```
+
+지역과 섹터는 폴더로 빠르게 나누고, `혼자/커플/남자/여자/가족` 같은 개인화 축은 폴더와 문서 메타데이터를 같이 사용합니다. 사용자별 선호 내역은 공용 RAG에 섞지 않고 계정 폴더 최상단의 `localtrip/preferences.json`과 `localtrip/history.jsonl`에 저장하는 구조입니다.
+
+분석 볼륨 초기화:
+
+```bash
+/root/scripts/localtrip_init_analysis_volume.sh
+```
+
+TourAPI collector 샘플/Mock export:
+
+```bash
+python3 /root/scripts/localtrip_collect_tourapi.py mock-export
+```
+
+### AI 일정 생성 구조
+
+현재는 실제 Gemini/OpenAI 호출 대신 DB의 Destination 데이터를 여행 스타일과 지역 조건에 맞게 조합합니다. 이후 실제 LLM 호출부를 붙일 때는 `TravelPlanService`의 생성 흐름을 유지하고, 프롬프트 생성과 응답 파싱 계층만 분리하면 됩니다.
+
+### 향후 확장 계획
+
+- 실제 TourAPI `areaBasedList2`, `searchKeyword2`, `detailCommon2` 연동 강화
+- Gemini/OpenAI 기반 일정 생성
+- Vector DB 기반 여행지 검색
+- 사용자 로그인/찜하기
+- Kubernetes 운영 배포 고도화
+- Prometheus/Grafana 모니터링
 
 
 ## 🚀 진행 상태 체크리스트
