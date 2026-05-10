@@ -587,7 +587,7 @@ function PlannerPage({ path, navigate }) {
   const { destinations, error, usingFallback } = useDestinations();
   const params = new URLSearchParams(path.split('?')[1] || '');
   const initialDestination = params.get('destination') || '';
-  const [destinationId, setDestinationId] = useState(initialDestination);
+  const [selectedDestinationIds, setSelectedDestinationIds] = useState(initialDestination ? [initialDestination] : []);
   const [startDate, setStartDate] = useState('');
   const [days, setDays] = useState(3);
   const [travelers, setTravelers] = useState('커플');
@@ -601,19 +601,25 @@ function PlannerPage({ path, navigate }) {
   const [generateError, setGenerateError] = useState('');
   const [generatedPlan, setGeneratedPlan] = useState(null);
 
-  const selectedDestination = destinations.find((destination) => destination.id === destinationId) || destinations[0];
-
   useEffect(() => {
-    if (initialDestination) {
-      setDestinationId(initialDestination);
+    if (initialDestination && !selectedDestinationIds.includes(initialDestination)) {
+      setSelectedDestinationIds((current) => [...new Set([...current, initialDestination])]);
     }
   }, [initialDestination]);
 
   useEffect(() => {
-    if (!destinationId && destinations.length) {
-      setDestinationId(destinations[0].id);
+    if (selectedDestinationIds.length === 0 && destinations.length > 0) {
+      setSelectedDestinationIds([destinations[0].id]);
     }
-  }, [destinationId, destinations]);
+  }, [destinations]);
+
+  const toggleDestination = (id) => {
+    setSelectedDestinationIds((current) => (
+      current.includes(id)
+        ? (current.length > 1 ? current.filter((item) => item !== id) : current)
+        : [...current, id]
+    ));
+  };
 
   const toggleInterest = (interest) => {
     setSelectedInterests((current) => (
@@ -628,8 +634,12 @@ function PlannerPage({ path, navigate }) {
     setGenerating(true);
     setGenerateError('');
     setGeneratedPlan(null);
+
+    const selectedDestObjects = destinations.filter(d => selectedDestinationIds.includes(d.id));
+    const regions = [...new Set(selectedDestObjects.map(d => d.region))];
+
     const payload = {
-      region: selectedDestination?.region,
+      regions,
       travelStyle: selectedInterests,
       styles: selectedInterests,
       startDate: startDate || null,
@@ -660,7 +670,7 @@ function PlannerPage({ path, navigate }) {
       <section className="ltPageTitle">
         <div>
           <span className="ltEyebrow">Planner</span>
-          <h1>Build a day-by-day route</h1>
+          <h1>Build a multi-stop route</h1>
         </div>
       </section>
 
@@ -668,14 +678,23 @@ function PlannerPage({ path, navigate }) {
 
       <section className="ltPlannerLayout">
         <form className="ltPlannerForm" onSubmit={submit}>
-          <label>
-            <span>Destination</span>
-            <select value={destinationId} onChange={(event) => setDestinationId(event.target.value)}>
+          <div className="ltInterestGroup">
+            <span>Destinations (Multiple selection available)</span>
+            <div className="ltDestSelectionGrid">
               {destinations.map((destination) => (
-                <option key={destination.id} value={destination.id}>{destination.name}</option>
+                <button
+                  key={destination.id}
+                  type="button"
+                  className={`ltDestChip ${selectedDestinationIds.includes(destination.id) ? 'active' : ''}`}
+                  onClick={() => toggleDestination(destination.id)}
+                >
+                  <strong>{destination.name}</strong>
+                  <small>{destination.region}</small>
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
+
           <div className="ltFormGrid">
             <label>
               <span>Start date</span>
@@ -751,13 +770,26 @@ function PlannerPage({ path, navigate }) {
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Arrival time, mobility needs, must-see stops" />
           </label>
           {generateError ? <div className="ltInlineNotice error"><strong>Generation failed</strong><span>{generateError}</span></div> : null}
-          <button type="submit" className="ltPrimaryButton" disabled={generating || !destinationId}>
+          <button type="submit" className="ltPrimaryButton" disabled={generating || selectedDestinationIds.length === 0}>
             {generating ? 'Generating' : 'Generate plan'}
           </button>
         </form>
 
         <aside className="ltPlannerPreview">
-          {selectedDestination ? <DestinationCard destination={selectedDestination} compact navigate={navigate} /> : null}
+          <div className="ltSelectedSummary">
+            <h3>Selected ({selectedDestinationIds.length})</h3>
+            <div className="ltMiniDestList">
+              {destinations.filter(d => selectedDestinationIds.includes(d.id)).map(d => (
+                <div key={d.id} className="ltMiniDestCard">
+                  <div className="ltMiniDestPhoto" style={{ backgroundImage: `url("${d.imageUrl}")` }} />
+                  <div>
+                    <strong>{d.name}</strong>
+                    <span>{d.region}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
           {generatedPlan ? (
             <div className="ltGeneratedPreview">
               <h2>{generatedPlan.title}</h2>
