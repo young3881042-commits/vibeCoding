@@ -36,6 +36,8 @@ public record AppProperties(
         Boolean ragWeatherEnabled,
         String weatherApiBaseUrl,
         String weatherLocations,
+        String codexApiBaseUrl,
+        String codexModel,
         String geminiApiKey,
         String openAiApiKey,
         String openAiModel,

@@ -258,7 +258,7 @@ public class WorkspaceExecutionService {
                 providerId,
                 "openai".equals(providerId) ? model : "codex-cli-session",
                 prompt,
-                result.output().trim(),
+                cleanGeminiOutput(result.output()),
                 relativeDirectory,
                 result.exitCode(),
                 result.timedOut(),
@@ -517,6 +517,28 @@ public class WorkspaceExecutionService {
                 + " && if [ -d /workspace-data/users/admin1/.gemini ]; then cp -f /workspace-data/users/admin1/.gemini/* \"$HOME/.gemini/\" 2>/dev/null || true; fi"
                 + " && printf %s " + shellQuote(settingsJson) + " > \"$HOME/.gemini/settings.json\""
                 + " && printf %s " + shellQuote(trustedFoldersJson) + " > \"$HOME/.gemini/trustedFolders.json\"";
+    }
+
+    private String cleanGeminiOutput(String output) {
+        if (output == null || output.isBlank()) {
+            return "";
+        }
+        StringBuilder cleaned = new StringBuilder();
+        for (String line : output.replace("\r\n", "\n").replace('\r', '\n').split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isBlank()
+                    || trimmed.startsWith("Warning: Basic terminal detected")
+                    || trimmed.startsWith("Warning: 256-color support not detected")
+                    || trimmed.startsWith("YOLO mode is enabled")
+                    || trimmed.startsWith("Nice to meet you. I am Gemini CLI")) {
+                continue;
+            }
+            if (cleaned.length() > 0) {
+                cleaned.append('\n');
+            }
+            cleaned.append(line);
+        }
+        return cleaned.toString().trim();
     }
 
     private ExecutionResult executeCommand(String shellCommand, long timeoutSeconds) {

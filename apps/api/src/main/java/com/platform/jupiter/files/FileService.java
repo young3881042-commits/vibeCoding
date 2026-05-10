@@ -23,6 +23,9 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class FileService {
     private static final String USER_WORKSPACE_DIR = "workspace";
+    private static final String LOCALTRIP_PROFILE_DIR = "localtrip";
+    private static final String LOCALTRIP_PREFERENCES_FILE = "preferences.json";
+    private static final String LOCALTRIP_HISTORY_FILE = "history.jsonl";
     private static final String DEFAULT_TEST_PY = """
             def main():
                 print("workspace is ready")
@@ -30,6 +33,20 @@ public class FileService {
 
             if __name__ == "__main__":
                 main()
+            """;
+    private static final String DEFAULT_LOCALTRIP_PREFERENCES = """
+            {
+              "version": 1,
+              "preferredRegions": [],
+              "preferredSectors": [],
+              "persona": "custom",
+              "pace": "normal",
+              "budgetLevel": "NORMAL",
+              "transportType": "PUBLIC_TRANSPORT",
+              "avoidTags": [],
+              "likedTags": [],
+              "memo": ""
+            }
             """;
     private static final String DEFAULT_STARTER_FILE = "main.py";
 
@@ -339,6 +356,24 @@ public class FileService {
             Files.createDirectories(root);
             if (username != null && !username.isBlank()) {
                 Files.createDirectories(root.resolve(USER_WORKSPACE_DIR));
+                Path localTripDir = root.resolve(LOCALTRIP_PROFILE_DIR);
+                Files.createDirectories(localTripDir);
+                Path preferencesFile = localTripDir.resolve(LOCALTRIP_PREFERENCES_FILE);
+                if (!Files.exists(preferencesFile)) {
+                    Files.writeString(
+                            preferencesFile,
+                            DEFAULT_LOCALTRIP_PREFERENCES,
+                            StandardOpenOption.CREATE_NEW,
+                            StandardOpenOption.WRITE);
+                }
+                Path historyFile = localTripDir.resolve(LOCALTRIP_HISTORY_FILE);
+                if (!Files.exists(historyFile)) {
+                    Files.writeString(
+                            historyFile,
+                            "",
+                            StandardOpenOption.CREATE_NEW,
+                            StandardOpenOption.WRITE);
+                }
             }
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to prepare workspace home", e);

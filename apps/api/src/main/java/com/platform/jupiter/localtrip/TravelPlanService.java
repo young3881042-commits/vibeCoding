@@ -1,0 +1,304 @@
+package com.platform.jupiter.localtrip;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.platform.jupiter.chat.ChatCredentialService;
+import com.platform.jupiter.chat.ChatUsage;
+import com.platform.jupiter.chat.ChatUsageService;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+@Service
+public class TravelPlanService {
+    private static final List<String> TIME_SLOTS = List.of("오전", "점심", "오후");
+    private static final String GEMINI_MODEL = "gemini-2.0-flash";
+    private static final int MAX_OUTPUT_TOKENS = 900;
+
+    private final TravelPlanRepository travelPlanRepository;
+    private final TravelPlanItemRepository travelPlanItemRepository;
+    private final LocalTripDestinationService destinationService;
+    private final LocalTripSchemaService schemaService;
+    private final ChatCredentialService chatCredentialService;
+    private final ChatUsageService chatUsageService;
+    private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
+
+    public TravelPlanService(
+            TravelPlanRepository travelPlanRepository,
+            TravelPlanItemRepository travelPlanItemRepository,
+            LocalTripDestinationService destinationService,
+            LocalTripSchemaService schemaService,
+            ChatCredentialService chatCredentialService,
+            ChatUsageService chatUsageService,
+            ObjectMapper objectMapper) {
+        this.travelPlanRepository = travelPlanRepository;
+        this.travelPlanItemRepository = travelPlanItemRepository;
+        this.destinationService = destinationService;
+        this.schemaService = schemaService;
+        this.chatCredentialService = chatCredentialService;
+        this.chatUsageService = chatUsageService;
+        this.objectMapper = objectMapper;
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(20))
+                .build();
+    }
+
+    @Transactional
+    public TravelPlanResponse generate(TravelPlanGenerateRequest request) {
+        return generate(request, "admin");
+    }
+
+    @Transactional
+    public TravelPlanResponse generate(TravelPlanGenerateRequest request, String username) {
+        schemaService.ensureSchema();
+        int days = request.days() == null ? 2 : request.days();
+        int travelerCount = request.travelerCount() == null ? 2 : request.travelerCount();
+        String travelerType = defaultText(request.travelerType(), "커플");
+        String pace = defaultText(request.pace(), "보통");
+        List<String> regions = normalizeRegions(request);
+        List<String> styles = normalizeStyles(request);
+        
+        String regionLabel = regions.isEmpty() ? "전국" : String.join("·", regions);
+        String stylesLabel = styles.isEmpty() ? "추천" : String.join(",", styles);
+
+        TravelPlan plan = new TravelPlan();
+        plan.setTitle(regionLabel + " " + days + "일 LocalTrip AI 일정");
+        plan.setRegion(regionLabel);
+        plan.setStyles(stylesLabel);
+        plan.setDays(days);
+        plan.setTravelerCount(travelerCount);
+        plan.setTravelerType(travelerType);
+        plan.setPace(pace);
+        plan.setSummary(regionLabel + "의 " + stylesLabel + " 취향을 반영한 " + travelerType + "용 "
+                + pace + " 속도 추천 일정입니다.");
+        TravelPlan savedPlan = travelPlanRepository.save(plan);
+
+        List<TravelPlanItem> items = generateItineraryWithGemini(savedPlan, request, username);
+        travelPlanItemRepository.saveAll(items);
+
+        return TravelPlanResponse.from(savedPlan, travelPlanItemRepository.findByTravelPlanIdOrderByDayNumberAscSequenceNumberAsc(savedPlan.getId()));
+    }
+
+    private List<TravelPlanItem> generateItineraryWithGemini(TravelPlan plan, TravelPlanGenerateRequest request, String username) {
+        String prompt = buildPrompt(plan, request);
+        String token = chatCredentialService.resolveUserGeminiAuthorization(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Gemini account is not connected for this user."));
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("model", GEMINI_MODEL);
+            payload.put("max_tokens", MAX_OUTPUT_TOKENS);
+            payload.put("temperature", 0.35);
+            payload.put(
+                "messages",
+                List.of(
+                    Map.of("role", "system", "content", "너는 한국 전문 여행 가이드 AI다. 반드시 요청받은 JSON 형식으로만 답변해라."),
+                    Map.of("role", "user", "content", prompt)
+                )
+            );
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"))
+                    .timeout(Duration.ofSeconds(120))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + token)
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Gemini itinerary request failed: HTTP " + response.statusCode());
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            chatUsageService.recordUsage(username, "gemini", GEMINI_MODEL, extractUsage(root));
+            String content = root.path("choices").path(0).path("message").path("content").asText("");
+            
+            if (content.contains("```json")) {
+                content = content.substring(content.indexOf("```json") + 7);
+                content = content.substring(0, content.lastIndexOf("```"));
+            } else if (content.contains("```")) {
+                content = content.substring(content.indexOf("```") + 3);
+                content = content.substring(0, content.lastIndexOf("```"));
+            }
+
+            JsonNode itineraryNode = objectMapper.readTree(content);
+            List<TravelPlanItem> items = new ArrayList<>();
+            int seq = 1;
+            if (itineraryNode.isArray()) {
+                for (JsonNode node : itineraryNode) {
+                    items.add(parseItem(plan, node, seq++));
+                }
+            }
+            return items.isEmpty() ? fallbackItems(plan) : items;
+
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return fallbackItems(plan);
+        }
+    }
+
+    private String buildPrompt(TravelPlan plan, TravelPlanGenerateRequest request) {
+        return String.format(
+            "한국 여행 일정을 JSON 배열로 생성해줘.\n" +
+            "- 지역: %s\n" +
+            "- 기간: %d일\n" +
+            "- 동행: %s\n" +
+            "- 선호: %s\n" +
+            "- 속도: %s\n" +
+            "- 이동수단: %s\n" +
+            "- 예산: %s\n" +
+            "- 메모: %s\n\n" +
+            "각 날짜마다 오전, 점심, 오후 3개만 만들고 note는 45자 이하로 써줘.\n" +
+            "형식: [{\"dayNumber\": 1, \"timeSlot\": \"오전\", \"destinationName\": \"장소\", \"note\": \"설명\", \"primaryStyle\": \"테마\"}, ...]",
+            plan.getRegion(),
+            plan.getDays(),
+            plan.getTravelerType(),
+            plan.getStyles(),
+            plan.getPace(),
+            defaultText(request.transportType(), "대중교통"),
+            defaultText(request.budgetLevel(), "보통"),
+            defaultText(request.memo(), "없음")
+        );
+    }
+
+    private ChatUsage extractUsage(JsonNode root) {
+        JsonNode usage = root.path("usage");
+        long inputTokens = firstPositive(
+                usage.path("prompt_tokens").asLong(-1),
+                usage.path("input_tokens").asLong(-1));
+        long outputTokens = firstPositive(
+                usage.path("completion_tokens").asLong(-1),
+                usage.path("output_tokens").asLong(-1));
+        long totalTokens = firstPositive(
+                usage.path("total_tokens").asLong(-1),
+                inputTokens + outputTokens);
+        return new ChatUsage(inputTokens, outputTokens, totalTokens);
+    }
+
+    private long firstPositive(long first, long fallback) {
+        if (first >= 0) {
+            return first;
+        }
+        return Math.max(0, fallback);
+    }
+
+    private TravelPlanItem parseItem(TravelPlan plan, JsonNode node, int sequence) {
+        TravelPlanItem item = new TravelPlanItem();
+        item.setTravelPlanId(plan.getId());
+        item.setDayNumber(node.path("dayNumber").asInt(1));
+        item.setSequenceNumber(sequence);
+        item.setTimeSlot(node.path("timeSlot").asText("유동적"));
+        item.setDestinationName(node.path("destinationName").asText("미정"));
+        item.setRegion(plan.getRegion());
+        item.setNote(node.path("note").asText(""));
+        item.setPrimaryStyle(node.path("primaryStyle").asText("관광"));
+        item.setDurationMinutes(60);
+        return item;
+    }
+
+    private List<TravelPlanItem> fallbackItems(TravelPlan plan) {
+        List<TravelPlanItem> items = new ArrayList<>();
+        for (int day = 1; day <= plan.getDays(); day++) {
+            TravelPlanItem item = new TravelPlanItem();
+            item.setTravelPlanId(plan.getId());
+            item.setDayNumber(day);
+            item.setSequenceNumber(day);
+            item.setTimeSlot("종일");
+            item.setDestinationName(plan.getRegion() + " 자유 여행");
+            item.setRegion(plan.getRegion());
+            item.setNote("Gemini 일정 생성에 문제가 있어 기본 정보를 제공합니다.");
+            item.setPrimaryStyle("자유");
+            item.setDurationMinutes(480);
+            items.add(item);
+        }
+        return items;
+    }
+
+    @Transactional
+    public List<TravelPlanResponse> listPlans() {
+        schemaService.ensureSchema();
+        return travelPlanRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(p -> TravelPlanResponse.from(p, travelPlanItemRepository.findByTravelPlanIdOrderByDayNumberAscSequenceNumberAsc(p.getId())))
+                .toList();
+    }
+
+    @Transactional
+    public TravelPlanResponse getPlan(Long id) {
+        schemaService.ensureSchema();
+        TravelPlan plan = travelPlanRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Travel plan not found"));
+        return TravelPlanResponse.from(plan, travelPlanItemRepository.findByTravelPlanIdOrderByDayNumberAscSequenceNumberAsc(id));
+    }
+
+    @Transactional
+    public void deletePlan(Long id) {
+        schemaService.ensureSchema();
+        if (!travelPlanRepository.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Travel plan not found");
+        }
+        travelPlanItemRepository.deleteByTravelPlanId(id);
+        travelPlanRepository.deleteById(id);
+    }
+
+    private List<String> normalizeRegions(TravelPlanGenerateRequest request) {
+        List<String> regions = normalizeList(request.regions());
+        String singleRegion = LocalTripText.normalize(request.region());
+        if (!singleRegion.isBlank() && regions.stream().noneMatch(singleRegion::equalsIgnoreCase)) {
+            List<String> merged = new ArrayList<>(regions);
+            merged.add(singleRegion);
+            return merged;
+        }
+        return regions;
+    }
+
+    private List<String> normalizeStyles(TravelPlanGenerateRequest request) {
+        List<String> styles = normalizeList(request.styles());
+        List<String> travelStyles = normalizeList(request.travelStyle());
+        if (!travelStyles.isEmpty()) {
+            styles = new ArrayList<>(styles);
+            for (String ts : travelStyles) {
+                if (styles.stream().noneMatch(ts::equalsIgnoreCase)) {
+                    styles.add(ts);
+                }
+            }
+        }
+        String singleStyle = LocalTripText.normalize(request.style());
+        if (!singleStyle.isBlank() && styles.stream().noneMatch(singleStyle::equalsIgnoreCase)) {
+            List<String> merged = new ArrayList<>(styles);
+            merged.add(singleStyle);
+            return merged;
+        }
+        return styles;
+    }
+
+    private List<String> normalizeList(List<String> values) {
+        if (values == null) return List.of();
+        return values.stream()
+                .map(LocalTripText::normalize)
+                .filter(v -> !v.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private String defaultText(String value, String fallback) {
+        String normalized = LocalTripText.normalize(value);
+        return normalized.isBlank() ? fallback : normalized;
+    }
+}

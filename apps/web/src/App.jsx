@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import LocalTripApp from './LocalTripApp.jsx';
 
 const AUTH_KEY = 'codex-workspace-auth';
 const LazyCodeEditor = lazy(() => import('./CodeEditor.jsx'));
@@ -91,6 +92,27 @@ function monitorUrls() {
     grafana: `http://${host}:30300`,
     prometheus: `http://${host}:30090`
   };
+}
+
+function formatCpu(milli) {
+  if (!milli) return '0m';
+  if (milli >= 1000) return `${(milli / 1000).toFixed(1)} cores`;
+  return `${milli}m`;
+}
+
+function formatMemory(mib) {
+  if (!mib) return '0 MiB';
+  if (mib >= 1024) return `${(mib / 1024).toFixed(1)} GiB`;
+  return `${mib} MiB`;
+}
+
+function formatPercent(value) {
+  return `${Number(value || 0).toFixed(1)}%`;
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString();
 }
 
 function validateAuthForm(mode, username, password) {
@@ -332,21 +354,21 @@ function WorkspaceHeader({
   return (
     <header className="workspaceTopbar">
       <section className="workspacePathCard">
-        <span className="panelEyebrow">Current Directory</span>
+        <span className="panelEyebrow">Workspace</span>
         <code className="workspacePathCode">{workspacePathFor(selectedPath)}</code>
       </section>
       <div className="workspaceUserTray">
         <div className="workspaceTopTabs">
           <button type="button" className={`ghostButton compact ${rightPanel === 'rag' ? 'active' : ''}`} onClick={() => setRightPanel('rag')}>RAG</button>
-          <button type="button" className={`ghostButton compact ${rightPanel === 'gemini' ? 'active' : ''}`} onClick={() => setRightPanel('gemini')}>Gemini</button>
+          <button type="button" className={`ghostButton compact ${rightPanel === 'gemini' ? 'active' : ''}`} onClick={() => setRightPanel('gemini')}>LLM</button>
           <button type="button" className={`ghostButton compact ${rightPanel === 'editor' ? 'active' : ''}`} onClick={() => setRightPanel('editor')}>파일 편집기</button>
           {auth.role === 'ADMIN' ? (
-            <button type="button" className={`ghostButton compact ${rightPanel === 'monitor' ? 'active' : ''}`} onClick={() => setRightPanel('monitor')}>모니터링</button>
+            <button type="button" className={`ghostButton compact ${rightPanel === 'monitor' ? 'active' : ''}`} onClick={() => setRightPanel('monitor')}>리소스</button>
           ) : null}
         </div>
         {auth.launcherUrl ? (
           <button type="button" className="ghostButton" onClick={onOpenLauncher}>
-            Launcher
+            분석 환경
           </button>
         ) : null}
         <div className="userMenuWrap">
@@ -363,8 +385,8 @@ function WorkspaceHeader({
           </button>
           {userMenuOpen ? (
             <div className="userMenuDropdown" onClick={(event) => event.stopPropagation()}>
-              <button type="button" onClick={onOpenAccountEdit}>Edit</button>
-              <button type="button" onClick={onLogout}>Logout</button>
+              <button type="button" onClick={onOpenAccountEdit}>계정 설정</button>
+              <button type="button" onClick={onLogout}>로그아웃</button>
             </div>
           ) : null}
         </div>
@@ -457,7 +479,7 @@ function FileList({
           </button>
         </div>
         <div className="listFilterGroup">
-          <input value={filter} onChange={(event) => onFilter(event.target.value)} placeholder="파일명 검색" />
+          <input value={filter} onChange={(event) => onFilter(event.target.value)} placeholder="파일 또는 폴더 검색" />
         </div>
       </div>
       <div className="entryList">
@@ -540,7 +562,7 @@ function FileList({
             ) : null}
           </div>
         ))}
-        {!files.length && !createDraft ? <p className="emptyNotice">이 경로에는 조건에 맞는 파일이 없습니다.</p> : null}
+        {!files.length && !createDraft ? <p className="emptyNotice">표시할 파일이 없습니다.</p> : null}
         {createDraft ? (
           <div className="entryRow createDraftRow">
             <div className="createDraftKinds">
@@ -549,14 +571,14 @@ function FileList({
                 className={`ghostButton compact ${createDraft.kind === 'file' ? 'active' : ''}`}
                 onClick={() => setCreateDraft((current) => ({ ...current, kind: 'file' }))}
               >
-                File
+                파일
               </button>
               <button
                 type="button"
                 className={`ghostButton compact ${createDraft.kind === 'folder' ? 'active' : ''}`}
                 onClick={() => setCreateDraft((current) => ({ ...current, kind: 'folder' }))}
               >
-                Folder
+                폴더
               </button>
             </div>
             <input
@@ -626,15 +648,15 @@ function EditorPanel({ selectedFile, content, setContent, loading, error, output
     <section className="browserPreviewPanel">
       <div className="editorHeader">
         <div>
-          <span className="panelEyebrow">File</span>
-          <h2>{selectedFile ? labelForPath(selectedFile) : '파일을 선택하세요'}</h2>
+          <span className="panelEyebrow">Editor</span>
+          <h2>{selectedFile ? labelForPath(selectedFile) : '편집할 파일을 선택하세요'}</h2>
           {selectedFile ? <p className="panelSubcopy">{selectedFile}</p> : null}
         </div>
         {selectedFile ? (
           <div className="chatHeaderActions">
-            <button type="button" className="ghostButton compact" onClick={onDownload}>Download</button>
-            <button type="button" className="ghostButton compact" onClick={onDelete}>Delete</button>
-            <button type="button" className="sendButton" onClick={onSave}>Save</button>
+            <button type="button" className="ghostButton compact" onClick={onDownload}>다운로드</button>
+            <button type="button" className="ghostButton compact" onClick={onDelete}>삭제</button>
+            <button type="button" className="sendButton" onClick={onSave}>저장</button>
           </div>
         ) : null}
       </div>
@@ -655,7 +677,7 @@ function EditorPanel({ selectedFile, content, setContent, loading, error, output
           </div>
           <div className="editorOutputSection">
             <div className="editorOutputHeader">
-              <strong>Output Log</strong>
+              <strong>실행 로그</strong>
               {outputState.command ? <span className="statusMeta">{outputState.command}</span> : null}
             </div>
             {outputState.running ? <p className="previewState">실행 중입니다.</p> : null}
@@ -677,7 +699,7 @@ function EditorPanel({ selectedFile, content, setContent, loading, error, output
                   </>
                 ) : null}
                 {!outputState.timedOut ? (
-                  <p className="statusMeta">exit code: {outputState.exitCode}</p>
+                  <p className="statusMeta">종료 코드: {outputState.exitCode}</p>
                 ) : (
                   <p className="statusMeta">실행 시간이 초과되어 종료했습니다.</p>
                 )}
@@ -690,30 +712,219 @@ function EditorPanel({ selectedFile, content, setContent, loading, error, output
   );
 }
 
-function AdminMonitorPanel({ activeMonitor, setActiveMonitor }) {
+function StatTile({ label, value, detail, tone = 'default' }) {
+  return (
+    <article className={`monitorStatTile ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail ? <small>{detail}</small> : null}
+    </article>
+  );
+}
+
+function UsageBar({ value }) {
+  const width = Math.max(0, Math.min(100, Number(value || 0)));
+  return (
+    <div className="usageBar" aria-label={`${width.toFixed(1)}%`}>
+      <span style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
+function AdminMonitorPanel({ authToken, activeMonitor, setActiveMonitor }) {
   const monitors = monitorUrls();
   const currentUrl = activeMonitor === 'prometheus' ? monitors.prometheus : monitors.grafana;
+  const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [monitorError, setMonitorError] = useState('');
+  const [containerSort, setContainerSort] = useState('cpu');
+
+  const loadDashboard = async (silent = false) => {
+    if (!authToken) return;
+    if (!silent) setLoading(true);
+    setMonitorError('');
+    try {
+      const data = await requestJson('/api/monitoring/cluster', { headers: authHeaders(authToken) });
+      setDashboard(data);
+    } catch (loadError) {
+      setMonitorError(loadError.message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboard().catch(() => {});
+    const timer = window.setInterval(() => {
+      loadDashboard(true).catch(() => {});
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [authToken]);
+
+  const summary = dashboard?.summary;
+  const nodes = dashboard?.nodes || [];
+  const namespaces = dashboard?.namespaces || [];
+  const containers = [...(dashboard?.containers || [])].sort((left, right) => {
+    if (containerSort === 'memory') {
+      return right.memoryUsageMi - left.memoryUsageMi || right.cpuUsageMilli - left.cpuUsageMilli;
+    }
+    if (containerSort === 'restart') {
+      return right.restartCount - left.restartCount || right.cpuUsageMilli - left.cpuUsageMilli;
+    }
+    return right.cpuUsageMilli - left.cpuUsageMilli || right.memoryUsageMi - left.memoryUsageMi;
+  });
 
   return (
-    <section className="browserPreviewPanel">
+    <section className="browserPreviewPanel monitorDashboardPanel">
       <div className="editorHeader">
         <div>
-          <span className="panelEyebrow">Monitor</span>
-          <h2>Cluster Usage</h2>
-          <p className="panelSubcopy">{currentUrl}</p>
+          <span className="panelEyebrow">Cluster Resources</span>
+          <h2>인프라 리소스 모니터링</h2>
+          <p className="panelSubcopy">
+            {dashboard ? `최근 수집: ${formatDateTime(dashboard.generatedAt)}` : '클러스터 CPU, 메모리, 컨테이너 상태를 한 화면에서 확인합니다.'}
+          </p>
         </div>
         <div className="chatHeaderActions">
+          <button type="button" className="ghostButton compact" onClick={() => loadDashboard()} disabled={loading}>
+            {loading ? '갱신 중' : '새로고침'}
+          </button>
           <button type="button" className={`ghostButton compact ${activeMonitor === 'grafana' ? 'active' : ''}`} onClick={() => setActiveMonitor('grafana')}>Grafana</button>
           <button type="button" className={`ghostButton compact ${activeMonitor === 'prometheus' ? 'active' : ''}`} onClick={() => setActiveMonitor('prometheus')}>Prometheus</button>
-          <button type="button" className="sendButton" onClick={() => window.open(currentUrl, '_blank', 'noopener,noreferrer')}>Open</button>
+          <button type="button" className="sendButton" onClick={() => window.open(currentUrl, '_blank', 'noopener,noreferrer')}>새 창으로 열기</button>
         </div>
       </div>
-      <iframe title={`${activeMonitor} monitor`} className="monitorFrame" src={currentUrl} />
+      {monitorError ? <p className="previewError">{monitorError}</p> : null}
+      {!dashboard && !monitorError ? <p className="previewState">클러스터 메트릭을 불러오는 중입니다.</p> : null}
+      {dashboard ? (
+        <div className="monitorDashboard">
+          <div className="monitorHero">
+            <StatTile
+              label="CPU"
+              value={formatCpu(summary?.cpuUsageMilli)}
+              detail={`${formatPercent(summary?.cpuUsagePercent)} of ${formatCpu(summary?.cpuCapacityMilli)}`}
+              tone="cpu"
+            />
+            <StatTile
+              label="메모리"
+              value={formatMemory(summary?.memoryUsageMi)}
+              detail={`${formatPercent(summary?.memoryUsagePercent)} / ${formatMemory(summary?.memoryCapacityMi)}`}
+              tone="memory"
+            />
+            <StatTile
+              label="파드"
+              value={`${summary?.runningPodCount || 0}/${summary?.podCount || 0}`}
+              detail={`${summary?.containerCount || 0}개 컨테이너`}
+            />
+            <StatTile
+              label="GPU"
+              value={`${summary?.gpuAllocatable || 0}/${summary?.gpuCapacity || 0}`}
+              detail={summary?.gpuCapacity ? 'GPU 리소스 노출됨' : 'GPU 리소스 없음'}
+              tone={summary?.gpuCapacity ? 'gpu' : 'muted'}
+            />
+          </div>
+
+          {dashboard.warnings?.length ? (
+            <div className="monitorWarning">
+              {dashboard.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+            </div>
+          ) : null}
+
+          <div className="monitorSectionGrid">
+            <section className="monitorCard">
+              <div className="monitorCardHeader">
+                <span className="panelEyebrow">Nodes</span>
+                <strong>{summary?.nodeCount || 0}개 노드</strong>
+              </div>
+              <div className="nodeUsageList">
+                {nodes.map((node) => (
+                  <article className="nodeUsageCard" key={node.name}>
+                    <div className="nodeUsageTitle">
+                      <div>
+                        <strong>{node.name}</strong>
+                        <span>{node.role} · {node.status} · {node.podCount}개 파드</span>
+                      </div>
+                      <span className="statusPill ok">{formatPercent(node.cpuUsagePercent)}</span>
+                    </div>
+                    <div className="nodeUsageMetric">
+                      <span>CPU {formatCpu(node.cpuUsageMilli)} / {formatCpu(node.cpuCapacityMilli)}</span>
+                      <UsageBar value={node.cpuUsagePercent} />
+                    </div>
+                    <div className="nodeUsageMetric">
+                      <span>RAM {formatMemory(node.memoryUsageMi)} / {formatMemory(node.memoryCapacityMi)}</span>
+                      <UsageBar value={node.memoryUsagePercent} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="monitorCard">
+              <div className="monitorCardHeader">
+                <span className="panelEyebrow">Namespaces</span>
+                <strong>{summary?.namespaceCount || 0}개 네임스페이스</strong>
+              </div>
+              <div className="monitorTable compactTable">
+                <div className="monitorTableHead namespaceColumns">
+                  <span>네임스페이스</span>
+                  <span>파드</span>
+                  <span>CPU</span>
+                  <span>메모리</span>
+                </div>
+                {namespaces.slice(0, 12).map((namespace) => (
+                  <div className="monitorTableRow namespaceColumns" key={namespace.name}>
+                    <strong>{namespace.name}</strong>
+                    <span>{namespace.runningPodCount}/{namespace.podCount}</span>
+                    <span>{formatCpu(namespace.cpuUsageMilli)}</span>
+                    <span>{formatMemory(namespace.memoryUsageMi)}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <section className="monitorCard containerMonitorCard">
+            <div className="monitorCardHeader">
+              <div>
+                <span className="panelEyebrow">Container Usage</span>
+                <strong>전체 {containers.length}개 컨테이너</strong>
+              </div>
+              <div className="chatHeaderActions">
+                <button type="button" className={`ghostButton compact ${containerSort === 'cpu' ? 'active' : ''}`} onClick={() => setContainerSort('cpu')}>CPU</button>
+                <button type="button" className={`ghostButton compact ${containerSort === 'memory' ? 'active' : ''}`} onClick={() => setContainerSort('memory')}>메모리</button>
+                <button type="button" className={`ghostButton compact ${containerSort === 'restart' ? 'active' : ''}`} onClick={() => setContainerSort('restart')}>재시작</button>
+              </div>
+            </div>
+            <div className="monitorTable containerTable">
+              <div className="monitorTableHead containerColumns">
+                <span>네임스페이스 / 파드</span>
+                <span>컨테이너</span>
+                <span>노드</span>
+                <span>CPU</span>
+                <span>메모리</span>
+                <span>재시작</span>
+              </div>
+              {containers.map((container) => (
+                <div className="monitorTableRow containerColumns" key={`${container.namespace}/${container.pod}/${container.container}`}>
+                  <div className="containerPodCell">
+                    <strong>{container.namespace}</strong>
+                    <span>{container.pod}</span>
+                  </div>
+                  <span>{container.container}</span>
+                  <span>{container.node || '-'}</span>
+                  <span>{formatCpu(container.cpuUsageMilli)}</span>
+                  <span>{formatMemory(container.memoryUsageMi)}</span>
+                  <span>{container.restartCount}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
 
-export default function App() {
+function WorkspaceApp() {
   const [authMode, setAuthMode] = useState('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -1268,7 +1479,7 @@ export default function App() {
       />
       <div className="rightPanelStack">
         <div className={rightPanel === 'gemini' ? 'panelVisible' : 'panelHidden'}>
-          <Suspense fallback={<div className="previewState">Gemini를 불러오는 중입니다.</div>}>
+          <Suspense fallback={<div className="previewState">AI 작업 패널을 불러오는 중입니다.</div>}>
             <LazyGeminiApp
               authToken={auth.token}
               directoryPath={selectedPath}
@@ -1284,11 +1495,11 @@ export default function App() {
               directoryPath={selectedPath}
               filePath={selectedFile}
               title={selectedFile || selectedPath || 'workspace-rag'}
-              pageTitle={selectedFile ? `RAG · ${labelForPath(selectedFile)}` : selectedPath ? `RAG · ${labelForPath(selectedPath)}` : 'Workspace RAG'}
+              pageTitle={selectedFile ? `문서 검색 · ${labelForPath(selectedFile)}` : selectedPath ? `문서 검색 · ${labelForPath(selectedPath)}` : '워크스페이스 문서 검색'}
               persistToWorkspace
               defaultQuestion={selectedFile
-                ? `${labelForPath(selectedFile)} 관련 문서에서 먼저 확인할 항목은 무엇인가?`
-                : 'Workspace 문서에서 먼저 확인할 항목은 무엇인가?'}
+                ? `${labelForPath(selectedFile)} 기준으로 먼저 확인해야 할 리스크를 정리해줘.`
+                : '워크스페이스 문서 기준으로 먼저 확인해야 할 리스크를 정리해줘.'}
               embedded
             />
           </Suspense>
@@ -1308,7 +1519,7 @@ export default function App() {
         </div>
         {auth.role === 'ADMIN' ? (
           <div className={rightPanel === 'monitor' ? 'panelVisible' : 'panelHidden'}>
-            <AdminMonitorPanel activeMonitor={activeMonitor} setActiveMonitor={setActiveMonitor} />
+            <AdminMonitorPanel authToken={auth.token} activeMonitor={activeMonitor} setActiveMonitor={setActiveMonitor} />
           </div>
         ) : null}
       </div>
@@ -1328,4 +1539,49 @@ export default function App() {
       />
     </main>
   );
+}
+
+function currentPath() {
+  const pathname = window.location.pathname || '/';
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return `${path}${window.location.search || ''}`;
+}
+
+export default function App() {
+  const [path, setPath] = useState(currentPath);
+
+  useEffect(() => {
+    const handlePop = () => setPath(currentPath());
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
+
+  const navigate = (nextPath) => {
+    if (!nextPath || nextPath === path) {
+      return;
+    }
+    window.history.pushState({}, '', nextPath);
+    setPath(currentPath());
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const routePath = path.split('?')[0];
+
+  useEffect(() => {
+    if (routePath === '/analysis' || routePath.startsWith('/analysis/')) {
+      const nextPath = `/analysisadmin${routePath.slice('/analysis'.length)}${path.includes('?') ? `?${path.split('?').slice(1).join('?')}` : ''}`;
+      window.history.replaceState({}, '', nextPath);
+      setPath(currentPath());
+    }
+  }, [path, routePath]);
+
+  if (routePath === '/analysis' || routePath.startsWith('/analysis/')) {
+    return null;
+  }
+
+  if (routePath === '/analysisadmin' || routePath.startsWith('/analysisadmin/')) {
+    return <WorkspaceApp />;
+  }
+
+  return <LocalTripApp path={path} navigate={navigate} />;
 }

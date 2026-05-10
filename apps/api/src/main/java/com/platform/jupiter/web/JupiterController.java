@@ -17,6 +17,9 @@ import com.platform.jupiter.chat.ChatProviderStatus;
 import com.platform.jupiter.chat.LocalChatService;
 import com.platform.jupiter.chat.OpenAiChatCompletionRequest;
 import com.platform.jupiter.chat.OpenAiChatCompletionResponse;
+import com.platform.jupiter.chat.SaveApiKeyRequest;
+import com.platform.jupiter.chat.ChatUsageResponse;
+import com.platform.jupiter.chat.ChatUsageService;
 import com.platform.jupiter.config.AppProperties;
 import com.platform.jupiter.foodshow.FoodShowAnalyticsService;
 import com.platform.jupiter.foodshow.FoodShowDashboardResponse;
@@ -36,6 +39,8 @@ import com.platform.jupiter.files.WorkspaceRunResponse;
 import com.platform.jupiter.notebook.NotebookInstanceDto;
 import com.platform.jupiter.notebook.NotebookRequest;
 import com.platform.jupiter.notebook.NotebookService;
+import com.platform.jupiter.monitoring.ClusterMonitoringResponse;
+import com.platform.jupiter.monitoring.ClusterMonitoringService;
 import com.platform.jupiter.rag.RagAnswerResponse;
 import com.platform.jupiter.rag.RagDocumentSummary;
 import com.platform.jupiter.rag.RagQueryRequest;
@@ -56,6 +61,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -69,6 +75,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api")
@@ -81,12 +88,14 @@ public class JupiterController {
     private final VirusScanService virusScanService;
     private final ChatService chatService;
     private final ChatCredentialService chatCredentialService;
+    private final ChatUsageService chatUsageService;
     private final LocalChatService localChatService;
     private final NotebookService notebookService;
     private final FoodShowAnalyticsService foodShowAnalyticsService;
     private final TravelAnalyticsService travelAnalyticsService;
     private final RagService ragService;
     private final RagWorkspaceService ragWorkspaceService;
+    private final ClusterMonitoringService clusterMonitoringService;
 
     public JupiterController(
             AppProperties appProperties,
@@ -97,12 +106,14 @@ public class JupiterController {
             VirusScanService virusScanService,
             ChatService chatService,
             ChatCredentialService chatCredentialService,
+            ChatUsageService chatUsageService,
             LocalChatService localChatService,
             NotebookService notebookService,
             FoodShowAnalyticsService foodShowAnalyticsService,
             TravelAnalyticsService travelAnalyticsService,
             RagService ragService,
-            RagWorkspaceService ragWorkspaceService) {
+            RagWorkspaceService ragWorkspaceService,
+            ClusterMonitoringService clusterMonitoringService) {
         this.appProperties = appProperties;
         this.buildService = buildService;
         this.authService = authService;
@@ -111,12 +122,14 @@ public class JupiterController {
         this.virusScanService = virusScanService;
         this.chatService = chatService;
         this.chatCredentialService = chatCredentialService;
+        this.chatUsageService = chatUsageService;
         this.localChatService = localChatService;
         this.notebookService = notebookService;
         this.foodShowAnalyticsService = foodShowAnalyticsService;
         this.travelAnalyticsService = travelAnalyticsService;
         this.ragService = ragService;
         this.ragWorkspaceService = ragWorkspaceService;
+        this.clusterMonitoringService = clusterMonitoringService;
     }
 
     @GetMapping("/overview")
@@ -295,6 +308,26 @@ public class JupiterController {
         return chatCredentialService.listProviderStatuses(session.username());
     }
 
+    @GetMapping("/chat/usage")
+    public ChatUsageResponse chatUsage(HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        return chatUsageService.usage(session.username());
+    }
+
+    @PostMapping("/chat/providers/openai")
+    public ResponseEntity<Void> saveOpenAiKey(@Valid @RequestBody SaveApiKeyRequest request, HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        chatCredentialService.saveOpenAiApiKey(session.username(), request.apiKey());
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/chat/providers/openai")
+    public ResponseEntity<Void> deleteOpenAiKey(HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        chatCredentialService.deleteCredential(session.username(), "openai");
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/chat/providers/gemini/link")
     public ChatProviderLinkResponse startGeminiLink(HttpServletRequest servletRequest) {
         AuthSession session = authService.requireSession(servletRequest);
@@ -416,6 +449,15 @@ public class JupiterController {
     @GetMapping("/travel/dashboard")
     public TravelDashboardResponse travelDashboard() {
         return travelAnalyticsService.dashboard();
+    }
+
+    @GetMapping("/monitoring/cluster")
+    public ClusterMonitoringResponse clusterMonitoring(HttpServletRequest servletRequest) {
+        AuthSession session = authService.requireSession(servletRequest);
+        if (!session.admin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin only");
+        }
+        return clusterMonitoringService.snapshot();
     }
 
     @GetMapping("/rag/documents")

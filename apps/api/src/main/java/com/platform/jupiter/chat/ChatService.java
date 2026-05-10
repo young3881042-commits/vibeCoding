@@ -36,29 +36,38 @@ public class ChatService {
     private final HttpClient httpClient;
     private final AppProperties appProperties;
     private final ChatCredentialService chatCredentialService;
+    private final ChatUsageService chatUsageService;
 
-    public ChatService(FileService fileService, ObjectMapper objectMapper, AppProperties appProperties, ChatCredentialService chatCredentialService) {
+    public ChatService(
+            FileService fileService,
+            ObjectMapper objectMapper,
+            AppProperties appProperties,
+            ChatCredentialService chatCredentialService,
+            ChatUsageService chatUsageService) {
         this.fileService = fileService;
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
         this.chatCredentialService = chatCredentialService;
+        this.chatUsageService = chatUsageService;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(20))
                 .build();
     }
 
     public ChatResponse chat(ChatRequest request, String username, boolean admin) {
-        String assistantMessage = requestModel(request, username);
+        ModelResult modelResult = requestModel(request, username);
+        String assistantMessage = modelResult.message();
+        chatUsageService.recordUsage(username, request.providerId(), request.model(), modelResult.usage());
         Instant now = Instant.now();
         String transcriptPath = resolveTranscriptPath(request, now);
         String title = resolveTitle(request);
         List<ChatMessage> transcriptMessages = new ArrayList<>(request.messages());
         transcriptMessages.add(new ChatMessage("assistant", assistantMessage));
         fileService.writeWorkspaceFile(transcriptPath, renderTranscript(request, transcriptMessages, title, now), username, admin);
-        return new ChatResponse(assistantMessage, transcriptPath, title, now);
+        return new ChatResponse(assistantMessage, transcriptPath, title, now, modelResult.usage());
     }
 
-    private String requestModel(ChatRequest request, String username) {
+    private ModelResult requestModel(ChatRequest request, String username) {
         try {
             String payload = objectMapper.writeValueAsString(buildPayload(request));
             HttpRequest.Builder builder = HttpRequest.newBuilder()
@@ -86,7 +95,7 @@ public class ChatService {
             if (content.isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Model API returned an empty answer");
             }
-            return content;
+            return new ModelResult(content, extractUsage(root));
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to parse model API response", e);
         } catch (InterruptedException e) {
@@ -131,6 +140,27 @@ public class ChatService {
             return builder.toString().trim();
         }
         return "";
+    }
+
+    private ChatUsage extractUsage(JsonNode root) {
+        JsonNode usage = root.path("usage");
+        long inputTokens = firstPositive(
+                usage.path("prompt_tokens").asLong(-1),
+                usage.path("input_tokens").asLong(-1));
+        long outputTokens = firstPositive(
+                usage.path("completion_tokens").asLong(-1),
+                usage.path("output_tokens").asLong(-1));
+        long totalTokens = firstPositive(
+                usage.path("total_tokens").asLong(-1),
+                inputTokens + outputTokens);
+        return new ChatUsage(inputTokens, outputTokens, totalTokens);
+    }
+
+    private long firstPositive(long first, long fallback) {
+        if (first >= 0) {
+            return first;
+        }
+        return Math.max(0, fallback);
     }
 
     private String resolveTranscriptPath(ChatRequest request, Instant now) {
@@ -257,5 +287,8 @@ public class ChatService {
                 .toLowerCase()
                 .replaceAll("(^-|-$)", "");
         return normalized.isBlank() ? "chat-session" : normalized;
+    }
+
+    private record ModelResult(String message, ChatUsage usage) {
     }
 }

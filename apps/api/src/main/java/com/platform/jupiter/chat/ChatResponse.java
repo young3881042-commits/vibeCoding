@@ -6,5 +6,6 @@ public record ChatResponse(
         String assistantMessage,
         String transcriptPath,
         String title,
-        Instant savedAt) {
+        Instant savedAt,
+        ChatUsage usage) {
 }
