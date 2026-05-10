@@ -3149,6 +3149,105 @@ body {
   animation: ltSoftSlide 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.ltPageHeader {
+  margin-bottom: 24px;
+}
+
+.ltBackButton {
+  background: none;
+  border: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.ltBackButton:hover {
+  color: #3182ce;
+}
+
+.ltPlanDetailContainer {
+  display: grid;
+  gap: 40px;
+}
+
+.ltPlanHero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 60px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 48px;
+  border-radius: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.05);
+}
+
+.ltPlanHeroMain {
+  display: grid;
+  gap: 16px;
+}
+
+.ltPlanFacts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.ltFactItem {
+  background: #f8fafc;
+  padding: 24px;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  border: 1px solid #edf2f7;
+}
+
+.ltFactItem span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ltFactItem strong {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.ltTimelineItemContent {
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 24px;
+  border: 1px solid #edf2f7;
+  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.02);
+  display: grid;
+  gap: 8px;
+}
+
+.ltTimelinePlace {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.ltTimelineNote {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #475569;
+}
+
 @keyframes ltSoftSlide {
   from { opacity: 0; transform: translateY(20px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }

@@ -136,11 +136,11 @@ function normalizeItineraryItem(raw, index = 0) {
   }
   const item = raw || {};
   return {
-    time: pickString(item.time, item.startTime, item.start_time, item.hour),
-    title: pickString(item.title, item.name, item.activity, item.placeName, item.place_name) || `Stop ${index + 1}`,
-    place: pickString(item.place, item.location, item.address, item.destinationName, item.destination_name),
+    time: pickString(item.time, item.timeSlot, item.time_slot, item.startTime, item.hour),
+    title: pickString(item.title, item.name, item.destinationName, item.destination_name, item.activity) || `Stop ${index + 1}`,
+    place: pickString(item.place, item.location, item.region, item.address),
     note: pickString(item.note, item.notes, item.description, item.reason),
-    tags: normalizeTags(item.tags, item.keywords)
+    tags: normalizeTags(item.tags, item.keywords, item.primaryStyle)
   };
 }
 
@@ -148,9 +148,9 @@ function normalizeItinerary(raw) {
   const parsed = parseMaybeJson(raw);
   const source = Array.isArray(parsed)
     ? parsed
-    : readArray(parsed, ['days', 'itinerary', 'dailyPlans', 'daily_itinerary', 'schedule', 'items']);
+    : readArray(parsed, ['items', 'days', 'itinerary', 'dailyPlans', 'daily_itinerary', 'schedule']);
 
-  if (!source.length) {
+  if (!source || !source.length) {
     return [];
   }
 
@@ -173,11 +173,13 @@ function normalizeItinerary(raw) {
     grouped.get(day).push(normalizeItineraryItem(row, index));
   });
 
-  return Array.from(grouped.entries()).map(([day, items]) => ({
-    day,
-    title: `Day ${day}`,
-    items
-  }));
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([day, items]) => ({
+      day,
+      title: `Day ${day}`,
+      items
+    }));
 }
 
 function normalizePlan(raw, index = 0) {
@@ -792,8 +794,17 @@ function PlansPage({ navigate }) {
 }
 
 function ItineraryTimeline({ itinerary }) {
-  if (!itinerary.length) {
-    return <div className="ltEmptyState">No itinerary items were returned for this plan.</div>;
+  if (!itinerary || !itinerary.length) {
+    return (
+      <div className="ltEmptyState" style={{ marginTop: '24px', padding: '60px' }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}>
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <p>일정 상세 내역이 아직 생성되지 않았거나 불러올 수 없습니다.</p>
+      </div>
+    );
   }
   return (
     <div className="ltTimeline">
@@ -801,22 +812,22 @@ function ItineraryTimeline({ itinerary }) {
         <section className="ltTimelineDay" key={day.day}>
           <div className="ltTimelineDayHeader">
             <span>Day {day.day}</span>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginTop: '8px' }}>{day.title}</h2>
+            <h2>{day.title}</h2>
           </div>
           <div className="ltTimelineItems">
             {day.items.map((item, index) => (
               <article className="ltTimelineItem" key={`${day.day}-${item.title}-${index}`}>
-                <time style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <time>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
                     <polyline points="12 6 12 12 16 14"></polyline>
                   </svg>
-                  {item.time || 'Flexible'}
+                  {item.time || '유동적'}
                 </time>
-                <div>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a' }}>{item.title}</h3>
+                <div className="ltTimelineItemContent">
+                  <h3>{item.title}</h3>
                   {item.place ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
+                    <span className="ltTimelinePlace">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                         <circle cx="12" cy="10" r="3"></circle>
@@ -824,9 +835,9 @@ function ItineraryTimeline({ itinerary }) {
                       {item.place}
                     </span>
                   ) : null}
-                  {item.note ? <p style={{ marginTop: '8px', color: '#475569', fontSize: '0.93rem' }}>{item.note}</p> : null}
-                  {item.tags.length ? (
-                    <div className="ltTagRow small" style={{ marginTop: '12px' }}>
+                  {item.note ? <p className="ltTimelineNote">{item.note}</p> : null}
+                  {item.tags && item.tags.length ? (
+                    <div className="ltTagRow small">
                       {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
                     </div>
                   ) : null}
@@ -874,26 +885,52 @@ function PlanDetailPage({ planId, navigate }) {
 
   return (
     <main className="ltPage">
-      <button type="button" className="ltBackButton" onClick={() => navigate('/plans')}>Back to plans</button>
-      {loading ? <div className="ltEmptyState">Loading itinerary.</div> : null}
-      {error ? <div className="ltInlineNotice error"><strong>Request failed</strong><span>{error}</span></div> : null}
+      <div className="ltPageHeader">
+        <button type="button" className="ltBackButton" onClick={() => navigate('/plans')}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          목록으로 돌아가기
+        </button>
+      </div>
+
+      {loading ? <div className="ltEmptyState" style={{ padding: '100px' }}>일정을 불러오는 중입니다...</div> : null}
+      {error ? <div className="ltInlineNotice error"><strong>로드 실패</strong><span>{error}</span></div> : null}
+      
       {plan ? (
-        <>
+        <div className="ltPlanDetailContainer">
           <section className="ltPlanHero">
-            <div>
+            <div className="ltPlanHeroMain">
               <span className="ltEyebrow">{plan.destinationName}</span>
               <h1>{plan.title}</h1>
               <p>{plan.summary}</p>
             </div>
             <div className="ltPlanFacts">
-              <span>{plan.days} days</span>
-              <span>{formatDate(plan.startDate)}</span>
-              <span>{plan.travelers}</span>
-              <span>{plan.pace}</span>
+              <div className="ltFactItem">
+                <span>기간</span>
+                <strong>{plan.days}일</strong>
+              </div>
+              <div className="ltFactItem">
+                <span>출발일</span>
+                <strong>{formatDate(plan.startDate)}</strong>
+              </div>
+              <div className="ltFactItem">
+                <span>인원</span>
+                <strong>{plan.travelers}</strong>
+              </div>
+              <div className="ltFactItem">
+                <span>속도</span>
+                <strong>{plan.pace}</strong>
+              </div>
             </div>
           </section>
+          
+          <div className="ltSectionHeader" style={{ marginTop: '48px', marginBottom: '24px' }}>
+            <h2>상세 일정</h2>
+          </div>
           <ItineraryTimeline itinerary={plan.itinerary} />
-        </>
+        </div>
       ) : null}
     </main>
   );
